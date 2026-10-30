@@ -1,1 +1,277 @@
-<!doctype html><meta charset="utf-8"><title>Dashboard placeholder</title><p>dashboard coming</p>
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Saathi · Shop dashboard</title>
+<style>
+  :root { --navy:#0f2d6b; --navy-2:#1b3f8f; --cyan:#06b6d4; --ink:#0b1b3a; --muted:#5b6b8a; --bg:#eef3fa; --card:#ffffff; --line:#dfe6f2; --green:#16a34a; --amber:#d97706; --red:#dc2626; --purple:#7c3aed; --pink:#db2777; --slate:#475569; }
+  * { box-sizing:border-box; }
+  html,body { margin:0; height:100%; }
+  body { background:var(--bg); color:var(--ink); font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans","Noto Sans Devanagari","Noto Sans Kannada",sans-serif; font-size:18px; display:flex; flex-direction:column; min-height:100vh; }
+  [hidden] { display:none !important; }
+  header { background:linear-gradient(90deg,var(--navy),var(--navy-2) 70%,#1d4ed8); color:#fff; padding:18px 36px; display:flex; align-items:center; gap:28px; }
+  header .brand { font-size:22px; font-weight:800; letter-spacing:.02em; display:flex; align-items:center; gap:10px; }
+  header .brand i { width:14px; height:14px; border-radius:50%; background:var(--cyan); display:inline-block; box-shadow:0 0 0 5px rgba(6,182,212,.25); }
+  header .shop { flex:1; }
+  header h1 { margin:0; font-size:34px; font-weight:800; line-height:1.1; }
+  header .meta { opacity:.85; font-size:17px; margin-top:4px; }
+  .pill { border-radius:999px; padding:8px 16px; font-size:16px; font-weight:600; background:rgba(255,255,255,.14); display:inline-flex; align-items:center; gap:8px; }
+  .pill .dot { width:10px; height:10px; border-radius:50%; background:#94a3b8; }
+  .pill[data-state="ringing"] .dot { background:#fbbf24; animation:blink 1s infinite; }
+  .pill[data-state="live"] .dot { background:#4ade80; animation:blink 1.4s infinite; }
+  .pill[data-state="ended"] .dot { background:#cbd5e1; }
+  .pill[data-state="preparing"] .dot { background:#38bdf8; animation:blink .7s infinite; }
+  @keyframes blink { 50%{opacity:.35} }
+  main { flex:1; display:grid; grid-template-columns: minmax(0,1.15fr) minmax(0,1.25fr) minmax(0,1fr); grid-template-rows:auto 1fr; gap:20px; padding:20px 36px 28px; min-height:0; }
+  .counters { grid-column:1 / -1; display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:20px; }
+  .counter { background:var(--card); border-radius:22px; padding:20px 28px; box-shadow:0 8px 30px rgba(15,45,107,.06); border-top:6px solid var(--navy); display:flex; flex-direction:column; gap:4px; }
+  .counter.green { border-top-color:var(--green); } .counter.cyan { border-top-color:var(--cyan); } .counter.navy { border-top-color:#1d4ed8; }
+  .counter .label { font-size:16px; letter-spacing:.14em; text-transform:uppercase; color:var(--muted); font-weight:700; }
+  .counter .value { font-size:64px; font-weight:800; line-height:1.05; font-variant-numeric:tabular-nums; letter-spacing:-.01em; }
+  .counter .note { color:var(--muted); font-size:16px; min-height:20px; }
+  .counter.bump .value { animation:bump .6s ease; }
+  @keyframes bump { 0%{transform:scale(1)} 30%{transform:scale(1.08); color:var(--green)} 100%{transform:scale(1)} }
+  .col { display:flex; flex-direction:column; gap:20px; min-height:0; min-width:0; }
+  .card { background:var(--card); border-radius:22px; padding:20px 24px; box-shadow:0 8px 30px rgba(15,45,107,.06); display:flex; flex-direction:column; min-height:0; min-width:0; }
+  .card h2 { margin:0 0 14px; font-size:15px; letter-spacing:.16em; text-transform:uppercase; color:var(--muted); font-weight:800; display:flex; justify-content:space-between; align-items:center; }
+  .card h2 small { font-weight:600; letter-spacing:0; text-transform:none; color:var(--muted); font-size:14px; }
+  .grow { flex:1; overflow:auto; min-height:0; }
+  .tak { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+  .tak .big { font-size:40px; font-weight:800; font-variant-numeric:tabular-nums; line-height:1.1; }
+  .tak .lab { color:var(--muted); font-size:15px; font-weight:600; }
+  .tak .sub { color:var(--muted); font-size:15px; }
+  .bars { margin-top:14px; display:flex; flex-direction:column; gap:8px; }
+  .bar { display:grid; grid-template-columns:150px 1fr 110px; align-items:center; gap:10px; font-size:15px; color:var(--muted); }
+  .bar b { color:var(--ink); text-align:right; font-variant-numeric:tabular-nums; }
+  .bar .track { height:14px; background:#e8eefb; border-radius:999px; overflow:hidden; }
+  .bar .fill { height:100%; background:linear-gradient(90deg,var(--navy-2),var(--cyan)); border-radius:999px; transition:width .8s ease; }
+  .dev { display:flex; align-items:center; gap:14px; padding:12px 0; border-top:1px solid var(--line); }
+  .dev:first-of-type { border-top:0; }
+  .dev .st { width:16px; height:16px; border-radius:50%; background:#cbd5e1; flex:none; }
+  .dev .st.online { background:var(--green); box-shadow:0 0 0 5px rgba(22,163,74,.18); }
+  .dev .st.offline { background:var(--red); box-shadow:0 0 0 5px rgba(220,38,38,.18); animation:blink 1s infinite; }
+  .dev .name { font-weight:700; font-size:19px; }
+  .dev .info { color:var(--muted); font-size:15px; }
+  .dev .badge { margin-left:auto; font-size:14px; font-weight:700; padding:5px 10px; border-radius:8px; background:#f1f5f9; color:var(--slate); white-space:nowrap; }
+  .dev .badge.offline { background:#fee2e2; color:var(--red); } .dev .badge.online { background:#dcfce7; color:var(--green); }
+  table { width:100%; border-collapse:collapse; }
+  td { padding:11px 6px; border-top:1px solid var(--line); vertical-align:middle; }
+  tr:first-child td { border-top:0; }
+  td.name { font-weight:700; font-size:19px; }
+  td.items { color:var(--muted); font-size:15px; }
+  td.amt { text-align:right; font-weight:800; font-size:20px; font-variant-numeric:tabular-nums; white-space:nowrap; }
+  td.days { color:var(--muted); text-align:right; white-space:nowrap; font-size:15px; }
+  .chip { display:inline-block; font-size:13px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; padding:4px 9px; border-radius:7px; }
+  .chip.outstanding { background:#fef3c7; color:#92400e; } .chip.reminded { background:#dbeafe; color:#1e40af; } .chip.paid { background:#dcfce7; color:#166534; }
+  .chip.settled { background:#dcfce7; color:#166534; } .chip.failed { background:#fee2e2; color:#991b1b; }
+  .log { display:flex; flex-direction:column; gap:10px; }
+  .entry { display:grid; grid-template-columns:118px 1fr auto; gap:12px; align-items:start; padding:12px 14px; border-radius:14px; background:#f7f9fd; border:1px solid var(--line); animation:slidein .35s ease; }
+  .entry.fail { background:#fff5f5; border-color:#fecaca; }
+  @keyframes slidein { from{opacity:0; transform:translateY(-8px)} to{opacity:1; transform:none} }
+  .role { font-size:13px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; padding:6px 8px; border-radius:8px; text-align:center; color:#fff; background:var(--slate); }
+  .role.Diagnoser { background:var(--purple); } .role.Fixer { background:var(--green); } .role.Seller { background:#1d4ed8; } .role.Compliance { background:var(--amber); } .role.Manager { background:#0f172a; } .role.Human { background:var(--pink); } .role.System { background:#64748b; }
+  .entry .what { font-size:17px; line-height:1.35; overflow-wrap:anywhere; }
+  .entry .what code { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:14px; color:var(--navy-2); background:#e8eefb; padding:2px 6px; border-radius:6px; margin-right:6px; }
+  .entry .t { color:var(--muted); font-size:13px; white-space:nowrap; font-variant-numeric:tabular-nums; }
+  .chat { display:flex; flex-direction:column; gap:8px; }
+  .bubble { max-width:92%; padding:10px 14px; border-radius:16px; font-size:16px; line-height:1.4; }
+  .bubble.saathi { background:#e8eefb; align-self:flex-start; border-bottom-left-radius:5px; }
+  .bubble.merchant { background:#dcfce7; align-self:flex-end; border-bottom-right-radius:5px; }
+  .bubble small { display:block; font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); margin-bottom:2px; }
+  .lat { display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
+  .lat span { font-size:13px; background:#f1f5f9; border-radius:8px; padding:4px 8px; color:var(--slate); font-variant-numeric:tabular-nums; }
+  .wa { overflow-wrap:anywhere; background:#e7f8ee; border:1px solid #bbe5c8; border-radius:16px; padding:14px 16px; font-size:16px; line-height:1.45; position:relative; }
+  .wa .to { font-size:13px; color:#166534; font-weight:800; letter-spacing:.08em; text-transform:uppercase; margin-bottom:6px; }
+  .wa .tick { position:absolute; right:12px; bottom:8px; font-size:12px; color:#2563eb; }
+  .empty { color:var(--muted); font-size:15px; padding:8px 0; }
+  .apr { display:flex; align-items:center; gap:12px; padding:12px 0; border-top:1px solid var(--line); }
+  .apr:first-child { border-top:0; }
+  .apr .d { flex:1; font-size:16px; line-height:1.35; }
+  .apr .d b { display:block; font-size:18px; }
+  .apr button { border:0; border-radius:10px; padding:10px 14px; font:inherit; font-weight:700; cursor:pointer; color:#fff; background:var(--green); }
+  .apr button.no { background:#94a3b8; }
+  .apr .st { font-weight:800; font-size:14px; letter-spacing:.06em; text-transform:uppercase; padding:6px 10px; border-radius:8px; background:#dcfce7; color:#166534; }
+  .apr .st.pending { background:#fef3c7; color:#92400e; } .apr .st.rejected { background:#fee2e2; color:#991b1b; }
+  footer { padding:0 36px 14px; color:var(--muted); font-size:14px; display:flex; justify-content:space-between; }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand"><i></i>Saathi</div>
+  <div class="shop">
+    <h1 id="shopName">…</h1>
+    <div class="meta" id="shopMeta"></div>
+  </div>
+  <div class="pill" id="callPill" data-state="idle"><span class="dot"></span><span id="callText">No call</span></div>
+  <div class="pill" id="clock">–</div>
+</header>
+<main>
+  <section class="counters">
+    <div class="counter green" id="cRecovered"><div class="label">Recovered</div><div class="value">₹0</div><div class="note">Soundbox and settlement leaks fixed</div></div>
+    <div class="counter cyan" id="cCollected"><div class="label">Collected</div><div class="value">₹0</div><div class="note">Udhaar paid after a reminder</div></div>
+    <div class="counter navy" id="cOffered"><div class="label">Offered</div><div class="value">₹0</div><div class="note">Working capital, awaiting human approval</div></div>
+  </section>
+
+  <div class="col">
+    <div class="card">
+      <h2>Takings <small id="takCount"></small></h2>
+      <div class="tak">
+        <div><div class="lab">Today so far</div><div class="big" id="tToday">₹0</div><div class="sub" id="tTodayN"></div></div>
+        <div><div class="lab">Yesterday</div><div class="big" id="tYest">₹0</div><div class="sub" id="tYestN"></div></div>
+      </div>
+      <div class="bars" id="bars"></div>
+    </div>
+    <div class="card">
+      <h2>Devices</h2>
+      <div id="devices"></div>
+    </div>
+    <div class="card grow">
+      <h2>Udhaar <small id="udhaarTotal"></small></h2>
+      <div class="grow"><table id="udhaar"></table></div>
+    </div>
+  </div>
+
+  <div class="col">
+    <div class="card" style="flex:1">
+      <h2>Agent actions <small>Diagnoser · Fixer · Seller · Compliance · Manager</small></h2>
+      <div class="grow log" id="log"><div class="empty">Waiting for Saathi to start the call…</div></div>
+    </div>
+  </div>
+
+  <div class="col">
+    <div class="card" style="flex:1.2">
+      <h2>Live call <small id="latSmall"></small></h2>
+      <div class="grow chat" id="chat"><div class="empty">Nothing yet.</div></div>
+      <div class="lat" id="lat"></div>
+    </div>
+    <div class="card">
+      <h2>WhatsApp to customer <small>mock channel</small></h2>
+      <div id="wa"><div class="empty">No message sent yet.</div></div>
+    </div>
+    <div class="card">
+      <h2>Human approval</h2>
+      <div id="approvals"><div class="empty">Nothing waiting.</div></div>
+    </div>
+  </div>
+</main>
+<footer><span>Merchant backend is simulated; Sarvam AI speech and reasoning are live.</span><span id="conn">connecting…</span></footer>
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const params = new URLSearchParams(location.search);
+  const merchantId = params.get("merchant") || "m001";
+  const inr = (n) => "₹" + Math.round(n).toLocaleString("en-IN");
+  const esc = (s) => String(s).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+  const timeOf = (iso) => { const d = new Date(iso); return d.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false, timeZone: "Asia/Kolkata" }); };
+
+  const counters = { recovered: 0, collected: 0, offered: 0 };
+  const shown = { recovered: 0, collected: 0, offered: 0 };
+  function animateCounter(key, el) {
+    const from = shown[key], to = counters[key];
+    if (from === to) return;
+    const start = performance.now(), dur = 900;
+    el.classList.remove("bump"); void el.offsetWidth; el.classList.add("bump");
+    const step = (t) => { const p = Math.min(1, (t - start) / dur), e = 1 - Math.pow(1 - p, 3); el.querySelector(".value").textContent = inr(from + (to - from) * e); if (p < 1) requestAnimationFrame(step); else shown[key] = to; };
+    requestAnimationFrame(step);
+  }
+  function setCounters(c) { Object.assign(counters, c); animateCounter("recovered", $("cRecovered")); animateCounter("collected", $("cCollected")); animateCounter("offered", $("cOffered")); }
+
+  function renderSnapshot(s) {
+    const m = s.merchant;
+    $("shopName").textContent = m.shopName;
+    $("shopMeta").textContent = `${m.ownerName} · ${m.area}, ${m.city} · ${m.language === "kn-IN" ? "ಕನ್ನಡ" : "हिंदी"} · ${m.phone}`;
+    $("clock").textContent = s.clockIst;
+    document.title = `Saathi · ${m.shopName}`;
+    const t = s.takings;
+    $("tToday").textContent = inr(t.today); $("tTodayN").textContent = `${t.todayCount} payments`;
+    $("tYest").textContent = inr(t.yesterday); $("tYestN").textContent = `${t.yesterdayCount} payments`;
+    const max = Math.max(t.today, t.yesterday, t.sameDayLastWeek, 1);
+    const bar = (lab, v) => `<div class="bar"><span>${lab}</span><div class="track"><div class="fill" style="width:${(v / max) * 100}%"></div></div><b>${inr(v)}</b></div>`;
+    $("bars").innerHTML = bar("Today so far", t.today) + bar("Yesterday", t.yesterday) + bar("Same day last week", t.sameDayLastWeek);
+    $("devices").innerHTML = s.devices.map((d) => {
+      const ev = d.lastEvent;
+      const info = ev ? (ev.kind === "offline" ? `Offline since ${timeOf(ev.at).slice(0, 5)} · ${ev.unconfirmed ? ev.unconfirmed.count + " payments (" + inr(ev.unconfirmed.amount) + ") unconfirmed" : ev.note}` : ev.kind === "restart" ? `Restarted ${timeOf(ev.at).slice(0, 5)} · ${ev.unconfirmed ? ev.unconfirmed.count + " payments (" + inr(ev.unconfirmed.amount) + ") confirmed" : "online"}` : ev.note) : `Heartbeat ${timeOf(d.lastHeartbeat).slice(0, 5)}`;
+      return `<div class="dev"><span class="st ${d.status}"></span><div><div class="name">${d.type === "soundbox" ? "Soundbox" : d.type.toUpperCase()} ${esc(d.id)}</div><div class="info">${esc(d.model)} · ${esc(info)}</div></div><span class="badge ${d.status}">${d.status}</span></div>`;
+    }).join("");
+    const failed = s.settlements.filter((x) => x.status !== "settled");
+    if (failed.length) $("devices").innerHTML += failed.map((x) => `<div class="dev"><span class="st offline"></span><div><div class="name">Settlement ${esc(x.id)}</div><div class="info">${inr(x.amount)} · ${esc(x.failureReason || "")}</div></div><span class="badge offline">failed</span></div>`).join("");
+    const retried = s.settlements.filter((x) => x.retriedAt);
+    if (retried.length) $("devices").innerHTML += retried.map((x) => `<div class="dev"><span class="st online"></span><div><div class="name">Settlement ${esc(x.id)}</div><div class="info">${inr(x.amount)} · retried, ${esc(x.bankRef || "")}</div></div><span class="badge online">settled</span></div>`).join("");
+    const today = s.clockIst.slice(0, 10);
+    const days = (since) => Math.round((Date.parse(today) - Date.parse(since)) / 86400000);
+    const u = [...s.udhaar].sort((a, b) => (a.status === "paid") - (b.status === "paid") || b.amount - a.amount);
+    $("udhaar").innerHTML = u.map((x) => `<tr><td class="name">${esc(x.customerName)}</td><td class="items">${esc(x.items)}</td><td class="days">${days(x.since)} days</td><td class="amt">${inr(x.amount)}</td><td><span class="chip ${x.status}">${x.status}</span></td></tr>`).join("");
+    const out = s.udhaar.filter((x) => x.status !== "paid").reduce((a, x) => a + x.amount, 0);
+    $("udhaarTotal").textContent = `${inr(out)} outstanding`;
+    renderApprovals(s.approvals, s.loanOffers);
+    setCounters(s.counters);
+  }
+
+  function renderApprovals(list, offers) {
+    if (!list.length) { $("approvals").innerHTML = '<div class="empty">Nothing waiting.</div>'; return; }
+    $("approvals").innerHTML = list.map((a) => {
+      const offer = (offers || []).find((o) => o.approvalId === a.id);
+      const d = `<b>${esc(a.action.replace(/_/g, " "))}${a.amount ? " · " + inr(a.amount) : ""}</b>${esc(offer ? `${offer.tenureMonths} months at ${offer.annualRate}% p.a. · ${offer.lender}` : a.details)}`;
+      const ctl = a.status === "pending" ? `<button data-id="${a.id}" data-d="approved">Approve</button><button class="no" data-id="${a.id}" data-d="rejected">Reject</button>` : `<span class="st ${a.status}">${a.status}</span>`;
+      return `<div class="apr"><div class="d">${d}</div>${ctl}</div>`;
+    }).join("");
+  }
+  $("approvals").addEventListener("click", async (e) => {
+    const b = e.target.closest("button"); if (!b) return;
+    b.disabled = true;
+    await fetch(`/api/approvals/${b.dataset.id}/${b.dataset.d}`, { method: "POST" });
+  });
+
+  let logCount = 0;
+  function addLog(en) {
+    if (logCount === 0) $("log").innerHTML = "";
+    logCount++;
+    const d = document.createElement("div");
+    d.className = "entry" + (en.ok ? "" : " fail");
+    d.innerHTML = `<span class="role ${esc(en.actor)}">${esc(en.actor)}</span><div class="what"><code>${esc(en.tool)}</code>${esc(en.summary)}</div><span class="t">${timeOf(en.at)}<br>${en.ms} ms</span>`;
+    $("log").prepend(d);
+    while ($("log").children.length > 14) $("log").lastChild.remove();
+  }
+  let chatCount = 0;
+  function addChat(speaker, text) {
+    if (chatCount === 0) $("chat").innerHTML = "";
+    chatCount++;
+    const d = document.createElement("div"); d.className = "bubble " + speaker;
+    d.innerHTML = `<small>${speaker === "saathi" ? "Saathi" : "Merchant"}</small>${esc(text)}`;
+    $("chat").appendChild(d); $("chat").scrollTop = 1e9;
+  }
+  function setCall(state, transport) {
+    $("callPill").dataset.state = state;
+    $("callText").textContent = { idle: "No call", preparing: "Saathi reading the shop's data", ringing: "Calling the merchant", live: `On call (${transport})`, ended: "Call ended" }[state] || state;
+  }
+  function setLatency(l) {
+    $("lat").innerHTML = `<span>turn ${l.turn}</span><span>STT ${l.sttMs} ms</span><span>LLM ${l.llmMs} ms · ${l.llmCalls} calls</span><span>tools ${l.toolsMs} ms</span><span>TTS ${l.ttsMs} ms</span><span><b>total ${l.totalMs} ms</b></span>`;
+  }
+  function showWhatsapp(e) {
+    $("wa").innerHTML = `<div class="wa"><div class="to">To ${esc(e.toName)} · ${esc(e.to)}</div>${esc(e.text).replace(/(upi:\/\/\S+)/, '<u>$1</u>')}<span class="tick">✓✓ ${timeOf(e.at).slice(0, 5)}</span></div>`;
+  }
+
+  function connect() {
+    const es = new EventSource(`/events?merchant=${encodeURIComponent(merchantId)}`);
+    es.onopen = () => { $("conn").textContent = "live"; };
+    es.onerror = () => { $("conn").textContent = "reconnecting…"; };
+    es.onmessage = (ev) => {
+      const e = JSON.parse(ev.data);
+      switch (e.type) {
+        case "merchant": renderSnapshot(e.snapshot); break;
+        case "counters": setCounters(e.counters); break;
+        case "action": addLog(e.entry); break;
+        case "call": setCall(e.state, e.transport); if (e.state === "preparing") { $("chat").innerHTML = ""; chatCount = 0; } break;
+        case "transcript": addChat(e.speaker, e.text); break;
+        case "latency": setLatency(e.latency); break;
+        case "whatsapp": showWhatsapp(e); break;
+        case "approval": fetch(`/api/merchants/${merchantId}/snapshot`).then((r) => r.json()).then(renderSnapshot); break;
+      }
+    };
+  }
+  connect();
+})();
+</script>
+</body>
+</html>
