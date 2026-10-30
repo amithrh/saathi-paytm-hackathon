@@ -56,7 +56,7 @@ export class SarvamSpeechClient implements SpeechClient {
     const res = await this.post("/text-to-speech", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text, target_language_code: lang, speaker: this.opts.speaker ?? "priya", model: this.opts.ttsModel ?? "bulbul:v3", pace: this.opts.pace ?? 1.0 }),
+      body: JSON.stringify({ text, target_language_code: lang, speaker: this.opts.speaker ?? "priya", model: this.opts.ttsModel ?? "bulbul:v3", pace: this.opts.pace ?? 1.05 }),
     });
     const json = (await res.json()) as { audios?: string[] };
     const b64 = json.audios?.[0];

@@ -20,8 +20,42 @@ Closing line: "Other voice bots wait for questions. Saathi hunts for lost money 
 - Simulated: merchant backend (Soundbox health, settlements, loan eligibility, transaction history) with a few hundred fake merchants and planted problems. Tool layer designed so swapping mock for real APIs is a config change.
 - Demo moment: live Kannada or Hindi call where Saathi finds a failed settlement, retries it, confirms with the merchant, offers a loan, while the dashboard ticks up.
 
-## Open items (as of 27 Oct)
-- No prototype built yet.
+## Quickstart (prototype, built 30 Oct)
+
+```bash
+npm install
+cp .env.example .env        # put SARVAM_API_KEY in .env
+npm test                    # typecheck + 65 unit tests on the mock backend, agent loop, voice pipeline, Twilio transport
+npm run demo                # one process: mock backend API, agent, call screen, dashboard, SSE
+```
+
+Then open `http://localhost:3000/dashboard?merchant=m001` on the projector and `http://localhost:3000/call?merchant=m001` on the laptop. `?merchant=m002` is the Kannada merchant. The full talk track, judge lines, rehearsal checklist and fallback ladder are in [scripts/demo.md](scripts/demo.md).
+
+Other commands:
+- `npm run record-demo` plays the scripted Ravi conversation through the speakers and drives the dashboard without a microphone (`--voice` sends the judge lines as synthesised audio so STT runs too; `--no-play` is the silent automated check; `--merchant m002` for Kannada). Saves a WAV and transcript under `recordings/`.
+- `npm run transcript -- m001` runs the conversation as text against the live Sarvam LLM and prints every tool call with its role.
+- `npm run test:live` runs the Hindi and Kannada conversations against Sarvam and asserts the tool order (compliance before each gated action, human approval raised, call ended by the agent).
+- Rehearsing after 21:00 IST: `SAATHI_FAKE_NOW=2026-10-31T10:15:00+05:30 npm run demo`, otherwise the compliance check correctly refuses outside calling hours.
+
+### What is real and what is mocked
+- Real: Sarvam speech-to-text (`saarika:v2.5`), text-to-speech (`bulbul:v3`, speaker `priya`, Hindi and Kannada), reasoning and tool calling (`sarvam-105b-conversations`). The agent decides which tools to call; nothing in the conversation is scripted on the Saathi side.
+- Simulated: the merchant backend (`backend/`): 20 seeded merchants, transactions, Soundbox events, settlements, udhaar ledger, last year's seasonal pattern, loan eligibility. Tools are a typed registry with an HTTP surface (`POST /api/tools/:name`), so each one can be pointed at a real Paytm API without touching the agent.
+- Mocked channels: the WhatsApp reminder is rendered on the dashboard and logged, not sent. The customer "paying" 25 s after the reminder is a simulation and is labelled as such in the log.
+- Phone: the browser call screen is the primary transport. Twilio Media Streams is implemented and unit-tested against a fake stream (`twilio/`) but has not been exercised live; it needs `TWILIO_*`, `DEMO_PHONE_NUMBER` and a public `PUBLIC_BASE_URL` (ngrok) in `.env`.
+
+### How it is built
+- `backend/` mock merchant backend, tool registry with a fixed role per tool (Diagnoser: get_briefing; Fixer: restart_device, retry_settlement, send_reminder; Seller: check_loan_eligibility, offer_loan; Compliance: compliance_check; Manager: request_human_approval, end_call), compliance tickets gating send_reminder and offer_loan, event bus.
+- `agent/` one agent on Sarvam's LLM with those tools. The system prompt sets the language, the speech style and the call flow; the tool layer enforces consent and compliance regardless of what the model does.
+- `voice/` audio in, Sarvam STT, agent, Sarvam TTS (split by sentence, synthesised in parallel, streamed in order), audio out. The briefing is prepared while the phone rings. Browser transport over WebSocket with tap-to-talk.
+- `twilio/` the same pipeline over Twilio Media Streams (mu-law 8 kHz both ways, energy VAD for end of utterance), outbound dialling via REST.
+- `dashboard/` the projector page, fed by server-sent events.
+
+### Measured latency (30 Oct, home Wi-Fi)
+Per merchant turn: STT 135 to 285 ms, LLM 430 to 1,390 ms across 2 to 4 calls, tools under 5 ms, TTS to first audio 0.8 to 1.8 s, total 1.5 to 3.2 s from end of speech to first word back. The opening briefing takes 4 to 5 s to prepare and is ready before the merchant answers.
+
+## Open items (as of 30 Oct)
+- Twilio phone path untested live (no credentials yet). Browser call is the plan A.
+- The full call runs about 95 s with prompt replies; the judge can end it sooner with "ठीक है, धन्यवाद".
 - Worked rupee example for the impact slide left for the talk track (judges will ask "why 60%?").
 
 ## Folder layout
