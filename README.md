@@ -27,3 +27,10 @@ Closing line: "Other voice bots wait for questions. Saathi hunts for lost money 
 ## Folder layout
 - `deck/` — submitted pptx and pdf (7 slides: Title, Problem, Solution, Tech Stack, USP, Impact, Business Model)
 - `deck-src/` — pptxgenjs build script; `cd deck-src && npm install && node build.js`
+
+## Sarvam AI (verified 30 Oct 2026)
+Key lives in `.env` as `SARVAM_API_KEY` (never committed). Working endpoints and models:
+- TTS: `POST https://api.sarvam.ai/text-to-speech`, model `bulbul:v3`, speaker `priya` (others: aditya, ritu, neha, rahul, kavya, amit, roopa, kavitha...), `target_language_code` hi-IN and kn-IN both return WAV. Header `api-subscription-key`.
+- STT: `POST https://api.sarvam.ai/speech-to-text` multipart `file`, model `saarika:v2.5` or `saaras:v3`, `language_code` hi-IN. Transcribed our own clip exactly.
+- LLM: `POST https://api.sarvam.ai/v1/chat/completions`, model `sarvam-105b-conversations`, header `Authorization: Bearer`.
+- Deprecated, do not use: bulbul:v2, speaker anushka, sarvam-m.
