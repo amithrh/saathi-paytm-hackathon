@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Saathi call</title>
+<style>
+  :root { --bg:#0b1630; --panel:#13224a; --ink:#f4f7ff; --muted:#9fb0d6; --green:#22c55e; --red:#ef4444; --cyan:#22d3ee; --amber:#fbbf24; }
+  * { box-sizing:border-box; }
+  [hidden] { display:none !important; }
+  html,body { height:100%; margin:0; }
+  body { background:radial-gradient(1200px 800px at 50% -10%, #1b2f66 0%, var(--bg) 60%); color:var(--ink); font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans","Noto Sans Devanagari","Noto Sans Kannada",sans-serif; display:flex; flex-direction:column; align-items:center; }
+  header { width:100%; max-width:980px; display:flex; justify-content:space-between; align-items:center; padding:18px 24px; color:var(--muted); font-size:15px; }
+  header b { color:var(--ink); font-weight:600; }
+  main { width:100%; max-width:980px; flex:1; display:grid; grid-template-columns: 420px 1fr; gap:24px; padding:0 24px 24px; }
+  @media (max-width:900px){ main{ grid-template-columns:1fr; } }
+  .phone { background:var(--panel); border-radius:28px; padding:28px 24px; display:flex; flex-direction:column; align-items:center; min-height:560px; box-shadow:0 30px 80px rgba(0,0,0,.45); position:relative; }
+  .avatar { width:120px; height:120px; border-radius:50%; background:linear-gradient(135deg,#22d3ee,#3b82f6); display:grid; place-items:center; font-size:48px; font-weight:700; color:#06203a; margin-top:14px; position:relative; }
+  .avatar.ring::before,.avatar.ring::after { content:""; position:absolute; inset:-14px; border-radius:50%; border:3px solid rgba(34,211,238,.6); animation:pulse 1.6s ease-out infinite; }
+  .avatar.ring::after { animation-delay:.8s; }
+  .avatar.speaking { box-shadow:0 0 0 10px rgba(34,211,238,.18), 0 0 0 22px rgba(34,211,238,.08); }
+  @keyframes pulse { 0%{transform:scale(1);opacity:1} 100%{transform:scale(1.6);opacity:0} }
+  .who { margin-top:22px; font-size:30px; font-weight:700; letter-spacing:.3px; }
+  .sub { margin-top:6px; color:var(--muted); font-size:16px; min-height:22px; text-align:center; }
+  .timer { margin-top:4px; font-variant-numeric:tabular-nums; color:var(--muted); font-size:15px; }
+  .controls { margin-top:auto; width:100%; display:flex; flex-direction:column; gap:14px; align-items:center; }
+  button { border:0; border-radius:999px; font:inherit; cursor:pointer; color:white; }
+  .big { width:100%; padding:20px; font-size:22px; font-weight:700; }
+  .answer { background:var(--green); }
+  .answer:hover { background:#16a34a; }
+  .hangup { background:var(--red); padding:14px 28px; font-size:17px; font-weight:600; }
+  .mic { width:132px; height:132px; border-radius:50%; background:#1f3a7a; font-size:52px; display:grid; place-items:center; border:4px solid rgba(255,255,255,.08); transition:transform .1s, background .2s; }
+  .mic.on { background:var(--red); transform:scale(1.06); box-shadow:0 0 0 12px rgba(239,68,68,.25); }
+  .mic:disabled { opacity:.45; cursor:not-allowed; }
+  .hint { color:var(--muted); font-size:14px; text-align:center; }
+  .textrow { display:flex; gap:8px; width:100%; }
+  .textrow input { flex:1; padding:12px 14px; border-radius:12px; border:1px solid #2b4280; background:#0f1d41; color:var(--ink); font-size:16px; }
+  .textrow button { background:#2b4280; padding:0 18px; font-size:15px; }
+  .selector { display:flex; gap:8px; margin-top:16px; }
+  .selector button { background:#1f3a7a; padding:10px 16px; font-size:15px; }
+  .selector button.active { background:var(--cyan); color:#06203a; font-weight:700; }
+  .right { display:flex; flex-direction:column; gap:16px; min-height:0; }
+  .card { background:rgba(19,34,74,.8); border-radius:20px; padding:18px 20px; }
+  .card h2 { margin:0 0 10px; font-size:14px; letter-spacing:.14em; text-transform:uppercase; color:var(--muted); font-weight:600; }
+  .transcript { flex:1; overflow:auto; display:flex; flex-direction:column; gap:10px; min-height:280px; max-height:52vh; }
+  .bubble { max-width:88%; padding:12px 16px; border-radius:18px; font-size:19px; line-height:1.45; white-space:pre-wrap; }
+  .bubble.saathi { background:#1e3a8a; align-self:flex-start; border-bottom-left-radius:6px; }
+  .bubble.merchant { background:#065f46; align-self:flex-end; border-bottom-right-radius:6px; }
+  .bubble small { display:block; font-size:12px; color:var(--muted); margin-bottom:4px; letter-spacing:.08em; text-transform:uppercase; }
+  .lat { display:grid; grid-template-columns:repeat(5,1fr); gap:10px; }
+  .lat div { background:#0f1d41; border-radius:12px; padding:10px; text-align:center; }
+  .lat b { display:block; font-size:24px; font-variant-numeric:tabular-nums; }
+  .lat span { font-size:12px; color:var(--muted); }
+  .status { font-size:13px; color:var(--muted); min-height:18px; }
+  .err { color:#fca5a5; }
+  .pill { display:inline-block; padding:3px 10px; border-radius:999px; background:#1f3a7a; font-size:12px; margin-left:8px; }
+</style>
+</head>
+<body>
+<header>
+  <div><b>Saathi</b> · merchant CFO call</div>
+  <div id="conn">connecting…</div>
+</header>
+<main>
+  <section class="phone">
+    <div class="avatar" id="avatar">स</div>
+    <div class="who" id="who">Saathi</div>
+    <div class="sub" id="sub">Choose a merchant</div>
+    <div class="timer" id="timer"></div>
+    <div class="selector" id="selector">
+      <button data-m="m001">Ravi · Hindi</button>
+      <button data-m="m002">Lakshmi · Kannada</button>
+    </div>
+    <div class="controls">
+      <button class="big answer" id="startBtn">Ring the merchant</button>
+      <button class="big answer" id="answerBtn" hidden>Answer</button>
+      <button class="mic" id="micBtn" hidden disabled title="Tap to talk, tap again to send">🎙</button>
+      <div class="hint" id="hint" hidden>Tap the mic, speak, tap again to send. Or hold Space.</div>
+      <div class="textrow" id="textrow" hidden><input id="textIn" placeholder="Type instead (fallback)…"><button id="sendBtn">Send</button></div>
+      <button class="hangup" id="hangupBtn" hidden>Hang up</button>
+    </div>
+  </section>
+  <section class="right">
+    <div class="card">
+      <h2>Turn latency <span class="pill" id="turnNo">turn 0</span></h2>
+      <div class="lat">
+        <div><b id="lStt">–</b><span>STT ms</span></div>
+        <div><b id="lLlm">–</b><span>LLM ms</span></div>
+        <div><b id="lTools">–</b><span>tools ms</span></div>
+        <div><b id="lTts">–</b><span>TTS ms</span></div>
+        <div><b id="lTotal">–</b><span>total ms</span></div>
+      </div>
+      <div class="status" id="status"></div>
+    </div>
+    <div class="card" style="flex:1;display:flex;flex-direction:column;min-height:0">
+      <h2>Transcript</h2>
+      <div class="transcript" id="transcript"></div>
+    </div>
+  </section>
+</main>
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const params = new URLSearchParams(location.search);
+  let merchantId = params.get("merchant") || "m001";
+  let ws, outCtx, inCtx, micStream, processor, source, playhead = 0, speakingUntil = 0, ringTimer, callStart, timerInt, micOn = false, chunks = [], inRate = 16000;
+  const MERCHANTS = { m001: { who: "Ravi Kumar", sub: "Ravi Kirana Store · Jayanagar · हिंदी" }, m002: { who: "Lakshmi Devi", sub: "Lakshmi Provision Stores · Basavanagudi · ಕನ್ನಡ" } };
+
+  function selectMerchant(id) {
+    merchantId = id;
+    for (const b of $("selector").querySelectorAll("button")) b.classList.toggle("active", b.dataset.m === id);
+    $("who").textContent = MERCHANTS[id].who;
+    $("sub").textContent = MERCHANTS[id].sub;
+    history.replaceState(null, "", `?merchant=${id}`);
+  }
+  $("selector").addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) selectMerchant(b.dataset.m); });
+  selectMerchant(merchantId);
+
+  function status(msg, isErr) { $("status").textContent = msg; $("status").className = "status" + (isErr ? " err" : ""); }
+  function addBubble(speaker, text) {
+    const d = document.createElement("div");
+    d.className = "bubble " + speaker;
+    d.innerHTML = `<small>${speaker === "saathi" ? "Saathi" : "Merchant"}</small>` + text.replace(/</g, "&lt;");
+    $("transcript").appendChild(d);
+    $("transcript").scrollTop = 1e9;
+  }
+
+  // ---- audio out --------------------------------------------------------
+  function ensureOut() { if (!outCtx) outCtx = new (window.AudioContext || window.webkitAudioContext)(); if (outCtx.state === "suspended") outCtx.resume(); return outCtx; }
+  function b64ToBuf(b64) { const bin = atob(b64); const u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return u.buffer; }
+  let decodeQueue = Promise.resolve();
+  function playWav(b64) {
+    const ctx = ensureOut();
+    decodeQueue = decodeQueue.then(() => ctx.decodeAudioData(b64ToBuf(b64))).then((audio) => {
+      const src = ctx.createBufferSource(); src.buffer = audio; src.connect(ctx.destination);
+      const at = Math.max(ctx.currentTime + 0.02, playhead);
+      src.start(at); playhead = at + audio.duration; speakingUntil = Math.max(speakingUntil, playhead);
+      $("avatar").classList.add("speaking");
+      setTimeout(() => { if (ctx.currentTime >= speakingUntil - 0.05) $("avatar").classList.remove("speaking"); }, (playhead - ctx.currentTime) * 1000 + 60);
+    }).catch((e) => status("audio decode failed: " + e.message, true));
+  }
+  function ring() {
+    const ctx = ensureOut();
+    const burst = (t0) => { const o = ctx.createOscillator(), g = ctx.createGain(); o.frequency.value = 425; o.connect(g); g.connect(ctx.destination); g.gain.setValueAtTime(0, t0); g.gain.linearRampToValueAtTime(0.18, t0 + 0.02); g.gain.setValueAtTime(0.18, t0 + 0.38); g.gain.linearRampToValueAtTime(0, t0 + 0.4); o.start(t0); o.stop(t0 + 0.42); };
+    const cycle = () => { const t = ctx.currentTime; burst(t); burst(t + 0.6); };
+    cycle(); ringTimer = setInterval(cycle, 3000);
+  }
+  function stopRing() { clearInterval(ringTimer); ringTimer = null; }
+
+  // ---- audio in (push-to-talk) -----------------------------------------
+  async function ensureMic() {
+    if (micStream) return true;
+    try {
+      micStream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+      inCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+      inRate = inCtx.sampleRate;
+      source = inCtx.createMediaStreamSource(micStream);
+      processor = inCtx.createScriptProcessor(4096, 1, 1);
+      processor.onaudioprocess = (e) => { if (micOn) chunks.push(new Float32Array(e.inputBuffer.getChannelData(0))); };
+      source.connect(processor); processor.connect(inCtx.destination);
+      return true;
+    } catch (e) { status("Microphone unavailable: " + e.message + ". Use the text box.", true); return false; }
+  }
+  function floatTo16k(parts) {
+    const total = parts.reduce((s, p) => s + p.length, 0);
+    const f = new Float32Array(total); let o = 0; for (const p of parts) { f.set(p, o); o += p.length; }
+    const ratio = inRate / 16000, n = Math.floor(f.length / ratio), out = new Int16Array(n);
+    for (let i = 0; i < n; i++) { const pos = i * ratio, i0 = Math.floor(pos), i1 = Math.min(f.length - 1, i0 + 1), fr = pos - i0; const v = f[i0] * (1 - fr) + f[i1] * fr; out[i] = Math.max(-32768, Math.min(32767, Math.round(v * 32767))); }
+    return out;
+  }
+  async function micStart() {
+    if (micOn || !(await ensureMic())) return;
+    if (inCtx.state === "suspended") await inCtx.resume();
+    chunks = []; micOn = true; $("micBtn").classList.add("on"); status("Listening…");
+  }
+  function micStop() {
+    if (!micOn) return;
+    micOn = false; $("micBtn").classList.remove("on");
+    const pcm = floatTo16k(chunks); chunks = [];
+    if (pcm.length < 16000 * 0.25) { status("Too short, try again."); return; }
+    ws.send(pcm.buffer); status(`Sent ${(pcm.length / 16000).toFixed(1)} s of audio…`);
+  }
+  $("micBtn").addEventListener("click", () => (micOn ? micStop() : micStart()));
+  let spaceHeld = false;
+  document.addEventListener("keydown", (e) => { if (e.code === "Space" && !spaceHeld && document.activeElement !== $("textIn") && !$("micBtn").hidden) { e.preventDefault(); spaceHeld = true; micStart(); } });
+  document.addEventListener("keyup", (e) => { if (e.code === "Space" && spaceHeld) { e.preventDefault(); spaceHeld = false; micStop(); } });
+
+  // ---- websocket ----------------------------------------------------------
+  function connect() {
+    ws = new WebSocket((location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/ws/call");
+    ws.binaryType = "arraybuffer";
+    ws.onopen = () => { $("conn").textContent = "connected"; };
+    ws.onclose = () => { $("conn").textContent = "disconnected"; };
+    ws.onmessage = (ev) => {
+      const m = JSON.parse(ev.data);
+      switch (m.type) {
+        case "state": onState(m.state); break;
+        case "transcript": addBubble(m.speaker, m.text); break;
+        case "audio": playWav(m.wav); break;
+        case "thinking": status(m.on ? "Saathi is thinking…" : ""); $("micBtn").disabled = m.on; break;
+        case "latency": {
+          const l = m.latency; $("turnNo").textContent = `turn ${l.turn}`;
+          $("lStt").textContent = l.sttMs; $("lLlm").textContent = l.llmMs; $("lTools").textContent = l.toolsMs; $("lTts").textContent = l.ttsMs; $("lTotal").textContent = l.totalMs;
+          break;
+        }
+        case "error": status(m.message, true); break;
+      }
+    };
+  }
+  function onState(s) {
+    document.body.dataset.state = s;
+    if (s === "preparing") { $("sub").textContent = "Saathi is reading the shop's data…"; $("startBtn").hidden = true; $("selector").hidden = true; }
+    if (s === "ringing") { $("sub").textContent = "Incoming call from Saathi"; $("avatar").classList.add("ring"); $("answerBtn").hidden = false; ring(); }
+    if (s === "live") {
+      stopRing(); $("avatar").classList.remove("ring"); $("answerBtn").hidden = true;
+      $("micBtn").hidden = false; $("micBtn").disabled = false; $("hint").hidden = false; $("textrow").hidden = false; $("hangupBtn").hidden = false;
+      $("sub").textContent = "On call with Saathi"; callStart = Date.now();
+      timerInt = setInterval(() => { const s = Math.floor((Date.now() - callStart) / 1000); $("timer").textContent = `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`; }, 500);
+      ensureMic();
+    }
+    if (s === "ended") { stopRing(); clearInterval(timerInt); $("sub").textContent = "Call ended"; $("micBtn").hidden = true; $("hint").hidden = true; $("textrow").hidden = true; $("hangupBtn").hidden = true; $("avatar").classList.remove("ring", "speaking"); }
+  }
+  $("startBtn").addEventListener("click", () => { ensureOut(); ws.send(JSON.stringify({ type: "start", merchantId })); });
+  $("answerBtn").addEventListener("click", () => { ensureOut(); ws.send(JSON.stringify({ type: "answer" })); });
+  $("hangupBtn").addEventListener("click", () => ws.send(JSON.stringify({ type: "hangup" })));
+  $("sendBtn").addEventListener("click", sendText);
+  $("textIn").addEventListener("keydown", (e) => { if (e.key === "Enter") sendText(); });
+  function sendText() { const t = $("textIn").value.trim(); if (!t) return; ws.send(JSON.stringify({ type: "text", text: t })); $("textIn").value = ""; }
+  connect();
+  if (params.get("auto") === "1") { setTimeout(() => $("startBtn").click(), 500); }
+})();
+</script>
+</body>
+</html>
