@@ -53,6 +53,30 @@ Use `?merchant=m002` on both pages. The planted problem is a failed settlement o
 - ಹೌದು, ಲೋನ್ ಬೇಕು, ಮುಂದುವರಿಸಿ. (Houdu, loan beku, munduvarisi.)
 - ಸರಿ, ಧನ್ಯವಾದಗಳು. (Sari, dhanyavaadagalu.)
 
+## Live variant: real phone and real WhatsApp (when Twilio is configured)
+
+Two judges. Judge A is Ravi and holds the phone whose number is `DEMO_PHONE_NUMBER`. Judge B is Suresh and holds the phone whose number is `SURESH_PHONE_NUMBER`; that phone must have sent the WhatsApp sandbox join code the same morning.
+
+Morning of the demo:
+1. `ngrok http 3000`, paste the https URL into `PUBLIC_BASE_URL` in `.env`, start `npm run demo`.
+2. `npm run live:check -- --send`. Everything PASS, and judge B's phone received the test message. If anything fails, drop to the laptop variant; do not debug on stage.
+3. Keep this ready in a terminal:
+   `curl -X POST localhost:3000/twilio/call -H 'content-type: application/json' -d '{"merchantId":"m001"}'`
+
+On stage:
+- **You:** "Ravi's phone is about to ring. Suresh, keep your phone face up." Run the curl. Saathi prepares the briefing while Twilio dials (about 5 s). Trial accounts play a short Twilio notice first; say "that is the trial account" and move on.
+- **Judge A** answers; hears the briefing on the handset (put it on speaker for the room); says हाँ, सुरेश को रिमाइंडर भेजो।
+- **Judge B's** phone buzzes with the Hindi WhatsApp and the UPI link, usually within 2 to 5 s. Dashboard says "sent via WhatsApp" with the message SID. Hold the phone up to the camera or the room.
+- Loan and goodbye exactly as in the laptop script. Approve on the dashboard.
+- There is no voice activity detection on the laptop path, but on the phone path there is: judge A should pause about a second after speaking, and should not talk over Saathi.
+
+Fallback ladder, in order:
+1. Live phone (Twilio) with live WhatsApp.
+2. Laptop call screen (`/call`) with the microphone; WhatsApp still live if configured, otherwise the dashboard bubble.
+3. Laptop call screen with the typed line.
+4. `npm run record-demo` through the speakers.
+5. Recorded WAV from `recordings/` plus a screen recording of the dashboard.
+
 ## If the judge goes off script
 
 The agent is live, not a recording. It handles "no" (skips the reminder, still offers the loan; declines gracefully), questions it has data for (yesterday's count, other udhaar names, the device), and says honestly when it does not have data. If the mic picks up noise, Saathi asks them to repeat. The **text box** on the call screen sends a typed line through the same agent; use it if the room is loud.

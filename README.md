@@ -35,12 +35,14 @@ Other commands:
 - `npm run record-demo` plays the scripted Ravi conversation through the speakers and drives the dashboard without a microphone (`--voice` sends the judge lines as synthesised audio so STT runs too; `--no-play` is the silent automated check; `--merchant m002` for Kannada). Saves a WAV and transcript under `recordings/`.
 - `npm run transcript -- m001` runs the conversation as text against the live Sarvam LLM and prints every tool call with its role.
 - `npm run test:live` runs the Hindi and Kannada conversations against Sarvam and asserts the tool order (compliance before each gated action, human approval raised, call ended by the agent).
+- `npm run live:check` is the pre-flight for the phone and WhatsApp path: validates the Twilio credentials, that `DEMO_PHONE_NUMBER` is a verified caller ID on a trial account, that `PUBLIC_BASE_URL` reaches this server, and (with `--send`) sends one WhatsApp test message. Prints a pass/fail table.
+- WhatsApp sandbox one-time step: each phone that should receive a message sends `join <sandbox-code>` to +1 415 523 8886 (code in Twilio console under Messaging > Try it out). The opt-in lasts 72 hours, so do it on the morning of the demo.
 - Rehearsing after 21:00 IST: `SAATHI_FAKE_NOW=2026-10-31T10:15:00+05:30 npm run demo`, otherwise the compliance check correctly refuses outside calling hours.
 
 ### What is real and what is mocked
 - Real: Sarvam speech-to-text (`saarika:v2.5`), text-to-speech (`bulbul:v3`, speaker `priya`, Hindi and Kannada), reasoning and tool calling (`sarvam-105b-conversations`). The agent decides which tools to call; nothing in the conversation is scripted on the Saathi side.
 - Simulated: the merchant backend (`backend/`): 20 seeded merchants, transactions, Soundbox events, settlements, udhaar ledger, last year's seasonal pattern, loan eligibility. Tools are a typed registry with an HTTP surface (`POST /api/tools/:name`), so each one can be pointed at a real Paytm API without touching the agent.
-- Mocked channels: the WhatsApp reminder is rendered on the dashboard and logged, not sent. The customer "paying" 25 s after the reminder is a simulation and is labelled as such in the log.
+- WhatsApp: mocked by default (rendered on the dashboard and logged). With `TWILIO_WHATSAPP_FROM` and `SURESH_PHONE_NUMBER` in `.env` the same tool sends the real message through the Twilio WhatsApp Sandbox and the dashboard shows "sent via WhatsApp" with the message SID; a failed live send falls back to the dashboard and says so. The customer "paying" 25 s after a mock reminder is a simulation, labelled as such; it is not simulated for live sends.
 - Phone: the browser call screen is the primary transport. Twilio Media Streams is implemented and unit-tested against a fake stream (`twilio/`) but has not been exercised live; it needs `TWILIO_*`, `DEMO_PHONE_NUMBER` and a public `PUBLIC_BASE_URL` (ngrok) in `.env`.
 
 ### How it is built
