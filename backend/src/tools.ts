@@ -38,6 +38,17 @@ export class ToolError extends Error {
 
 const inr = (n: number) => `Rs ${n.toLocaleString("en-IN")}`;
 
+/** Native-script spellings for the seeded names so the agent never reads a Latin name to TTS. */
+const NAME_SCRIPT: Record<Language, Record<string, string>> = {
+  "hi-IN": { Ravi: "रवि", Suresh: "सुरेश", Imran: "इमरान", Meena: "मीना", Lakshmi: "लक्ष्मी", Manjunath: "मंजुनाथ", Shobha: "शोभा", Ramesh: "रमेश", Kavitha: "कविता", Abdul: "अब्दुल", Nandini: "नंदिनी", Prasad: "प्रसाद", Divya: "दिव्या", Girish: "गिरीश", Fatima: "फ़ातिमा", Harish: "हरीश", Lalitha: "ललिता", Santosh: "संतोष", Bhavana: "भावना" },
+  "kn-IN": { Ravi: "ರವಿ", Suresh: "ಸುರೇಶ್", Imran: "ಇಮ್ರಾನ್", Meena: "ಮೀನಾ", Lakshmi: "ಲಕ್ಷ್ಮಿ", Manjunath: "ಮಂಜುನಾಥ್", Shobha: "ಶೋಭಾ", Ramesh: "ರಮೇಶ್", Kavitha: "ಕವಿತಾ", Abdul: "ಅಬ್ದುಲ್", Nandini: "ನಂದಿನಿ", Prasad: "ಪ್ರಸಾದ್", Divya: "ದಿವ್ಯಾ", Girish: "ಗಿರೀಶ್", Fatima: "ಫಾತಿಮಾ", Harish: "ಹರೀಶ್", Lalitha: "ಲಲಿತಾ", Santosh: "ಸಂತೋಷ್", Bhavana: "ಭಾವನಾ" },
+};
+
+export function nameInScript(name: string, lang: Language): string {
+  const first = name.split(" ")[0] ?? name;
+  return NAME_SCRIPT[lang][first] ?? name;
+}
+
 function str(args: Record<string, unknown>, key: string, required = true): string {
   const v = args[key];
   if (typeof v === "string" && v.trim()) return v.trim();
@@ -96,14 +107,14 @@ export const getBriefing: ToolDef = {
     const failed = m.settlements.filter((s) => s.status === "failed").map((s) => ({ settlement_id: s.id, amount: s.amount, date: s.date, reason: s.failureReason }));
     const udhaar = m.udhaar
       .filter((u) => u.status !== "paid")
-      .map((u) => ({ customer_id: u.customerId, name: u.customerName, amount: u.amount, days_outstanding: daysBetween(u.since, today), status: u.status }))
+      .map((u) => ({ customer_id: u.customerId, name: u.customerName, name_in_script: nameInScript(u.customerName, m.language), amount: u.amount, days_outstanding: daysBetween(u.since, today), status: u.status }))
       .sort((a, b) => b.amount - a.amount);
     const elig = loanEligibility(ctx);
     const suggested: Array<{ tool: string; args: Record<string, unknown>; why: string }> = [];
     for (const d of devices) if (d.issue) suggested.push({ tool: "restart_device", args: { device_id: d.device_id }, why: `${d.type} offline since ${d.issue.offline_since_ist}, ${d.issue.unconfirmed_payments} payments unconfirmed` });
     for (const s of failed) suggested.push({ tool: "retry_settlement", args: { settlement_id: s.settlement_id }, why: `settlement of ${inr(s.amount)} failed` });
     return {
-      merchant: { name: m.ownerName, shop: m.shopName, area: m.area, language: m.language },
+      merchant: { name: m.ownerName, name_in_script: nameInScript(m.ownerName, m.language), shop: m.shopName, area: m.area, language: m.language },
       date: today,
       time_ist: istTime(now),
       yesterday: { total: takings.yesterday, payments: takings.yesterdayCount, vs_same_day_last_week_pct: vsLastWeek },
@@ -250,14 +261,19 @@ function loanEligibility(ctx: ToolContext) {
   const raw = monthlyDigital * 0.15;
   const maxAmount = Math.min(200_000, Math.max(10_000, Math.round(raw / 10_000) * 10_000));
   const festival = festivalForLanguage(m.language);
+  const tenure = 6;
+  const rate = 18;
+  const approxMonthly = eligible ? Math.round((maxAmount * (1 + (rate / 100) * (tenure / 12))) / tenure / 10) * 10 : 0;
   const reasonShort = daysToDiwali > 0 && daysToDiwali <= 30
     ? `Last year sales rose ${festiveLiftPct}% around ${festival}; ${festival} is on ${diwali}, ${daysToDiwali} days away, so stock-up cash now pays back`
     : `Stable digital takings of ${inr(monthlyDigital)} in 30 days and a ${score} score`;
   return {
     eligible,
     max_amount: eligible ? maxAmount : 0,
-    tenure_months: 6,
-    annual_rate_pct: 18,
+    tenure_months: tenure,
+    annual_rate_pct: rate,
+    approx_monthly_repayment: approxMonthly,
+    total_repayment: eligible ? approxMonthly * tenure : 0,
     lender: LENDER_NAME,
     processing_fee: 0,
     monthly_digital_takings: monthlyDigital,
