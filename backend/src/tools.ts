@@ -1,4 +1,5 @@
-import type { ActionLogEntry, Actor, ComplianceAction, ComplianceResult, Language, Role } from "../../shared/types.js";
+import type { ActionLogEntry, Actor, ComplianceAction, ComplianceResult, Language, Role, WhatsAppDelivery } from "../../shared/types.js";
+import type { WhatsAppSender } from "../../whatsapp/src/client.js";
 import { daysBetween, istDate, istTime, type Clock } from "./clock.js";
 import { evaluateCompliance, HUMAN_APPROVAL_ABOVE, LENDER_NAME } from "./compliance.js";
 import type { EventBus } from "./events.js";
@@ -17,6 +18,10 @@ export interface ToolContext {
   merchantId: string;
   callId?: string;
   bus?: EventBus;
+  /** Live WhatsApp delivery. Absent means the mock channel (dashboard + log only). */
+  whatsapp?: WhatsAppSender;
+  /** Real phone numbers for seeded customers (customer_id -> E.164). Customers not listed stay mock. */
+  customerPhones?: Record<string, string>;
 }
 
 export interface ToolDef {
@@ -24,7 +29,7 @@ export interface ToolDef {
   role: Role;
   description: string;
   parameters: JsonSchema;
-  run(args: Record<string, unknown>, ctx: ToolContext): unknown;
+  run(args: Record<string, unknown>, ctx: ToolContext): unknown | Promise<unknown>;
   /** English one-liner for the dashboard log, from args and result. */
   summarize(args: Record<string, unknown>, result: unknown, ctx: ToolContext): string;
 }
@@ -220,7 +225,7 @@ export const sendReminder: ToolDef = {
     },
     required: ["customer_id"],
   },
-  run(args, ctx) {
+  async run(args, ctx) {
     const customerId = str(args, "customer_id");
     const ticketId = str(args, "compliance_ticket", false) || undefined;
     const ticket = ctx.store.findValidTicket(ctx.merchantId, "send_reminder", ticketId);
@@ -232,13 +237,31 @@ export const sendReminder: ToolDef = {
     const upiLink = `upi://pay?pa=${m.mid.toLowerCase()}@paytm&pn=${encodeURIComponent(m.shopName)}&am=${u.amount}&tn=Udhaar`;
     const text = reminderText(m.language, m.shopName, m.ownerName, u.customerName, u.amount, upiLink);
     ctx.store.consumeTicket(ticket.id);
+    const realPhone = ctx.customerPhones?.[customerId];
+    let delivery: WhatsAppDelivery = { mode: "mock", note: "shown on dashboard and logged; real send is a transport swap" };
+    if (ctx.whatsapp && realPhone) {
+      try {
+        const r = await ctx.whatsapp.send(realPhone, text);
+        delivery = { mode: "live", provider: ctx.whatsapp.label, sid: r.sid, status: r.status };
+      } catch (e) {
+        delivery = { mode: "failed", provider: ctx.whatsapp.label, error: (e as Error).message };
+      }
+    }
     const updated = ctx.store.markReminded(ctx.merchantId, customerId);
-    ctx.bus?.publish({ type: "whatsapp", merchantId: m.id, to: u.customerPhone, toName: u.customerName, text, at: ctx.clock.now().toISOString() });
-    return { ok: true, channel: "whatsapp", to: u.customerName, amount: u.amount, message: text, status: updated.status, delivery: "mocked: shown on dashboard and logged, real send is a transport swap" };
+    ctx.bus?.publish({ type: "whatsapp", merchantId: m.id, to: realPhone ?? u.customerPhone, toName: u.customerName, text, at: ctx.clock.now().toISOString(), delivery });
+    return {
+      ok: delivery.mode !== "failed",
+      channel: "whatsapp",
+      to: u.customerName,
+      amount: u.amount,
+      message: text,
+      status: updated.status,
+      delivery: delivery.mode === "live" ? `sent via ${delivery.provider}, message ${delivery.sid} (${delivery.status})` : delivery.mode === "failed" ? `live send failed (${delivery.error}); shown on dashboard only` : `mocked: ${delivery.note}`,
+    };
   },
   summarize(_a, r) {
-    const x = r as { to: string; amount: number };
-    return `WhatsApp reminder sent to ${x.to} for ${inr(x.amount)} with UPI link (mock channel)`;
+    const x = r as { to: string; amount: number; delivery: string };
+    return `WhatsApp reminder to ${x.to} for ${inr(x.amount)} with UPI link: ${x.delivery}`;
   },
 };
 
@@ -341,7 +364,7 @@ export const offerLoan: ToolDef = {
     },
     required: ["amount", "merchant_consented"],
   },
-  run(args, ctx) {
+  async run(args, ctx) {
     const amount = num(args, "amount");
     if (bool(args, "merchant_consented") !== true) throw new ToolError("CONSENT_REQUIRED", "Ask the merchant and only call offer_loan with merchant_consented=true after they agree");
     const ticketId = str(args, "compliance_ticket", false) || undefined;
@@ -354,7 +377,7 @@ export const offerLoan: ToolDef = {
     const needsHuman = amount > HUMAN_APPROVAL_ABOVE;
     let approvalId: string | undefined;
     if (needsHuman) {
-      const approvalResult = runTool(requestHumanApproval, { action: "offer_loan", details: `${inr(amount)} working capital, ${elig.tenure_months} months at ${elig.annual_rate_pct}% from ${elig.lender}. ${elig.reason_short}`, amount }, ctx);
+      const approvalResult = await runTool(requestHumanApproval, { action: "offer_loan", details: `${inr(amount)} working capital, ${elig.tenure_months} months at ${elig.annual_rate_pct}% from ${elig.lender}. ${elig.reason_short}`, amount }, ctx);
       approvalId = (approvalResult.result as { approval_id: string }).approval_id;
     }
     const offer = ctx.store.addLoanOffer(ctx.merchantId, {
@@ -404,15 +427,16 @@ export interface ToolRunOutcome {
 let logSeq = 0;
 
 /** Execute a tool, time it, log it with its role, publish the entry and any store-derived updates. */
-export function runTool(tool: ToolDef, args: Record<string, unknown>, ctx: ToolContext, actor: Actor = tool.role): ToolRunOutcome {
+export async function runTool(tool: ToolDef, args: Record<string, unknown>, ctx: ToolContext, actor: Actor = tool.role): Promise<ToolRunOutcome> {
   const started = Date.now();
   let result: unknown;
   let ok = true;
   let summary: string;
   try {
-    result = tool.run(args, ctx);
+    result = await tool.run(args, ctx);
     summary = tool.summarize(args, result, ctx);
     if (tool.name === "compliance_check" && !(result as ComplianceResult).allowed) ok = false;
+    if (result && typeof result === "object" && (result as { ok?: unknown }).ok === false) ok = false;
   } catch (err) {
     ok = false;
     const e = err as Error & { code?: string };
@@ -437,7 +461,7 @@ export function runTool(tool: ToolDef, args: Record<string, unknown>, ctx: ToolC
 }
 
 /** Run a tool by name; unknown names produce a failed log entry instead of a throw so the agent loop stays alive. */
-export function runToolByName(name: string, args: Record<string, unknown>, ctx: ToolContext): ToolRunOutcome {
+export async function runToolByName(name: string, args: Record<string, unknown>, ctx: ToolContext): Promise<ToolRunOutcome> {
   const tool = toolByName(name);
   if (!tool) {
     const entry: ActionLogEntry = { id: `A-${String(++logSeq).padStart(5, "0")}`, at: ctx.clock.now().toISOString(), merchantId: ctx.merchantId, actor: "Manager", tool: name, args, ok: false, summary: `Unknown tool ${name}`, result: { ok: false, error: "UNKNOWN_TOOL" }, ms: 0 };

@@ -163,6 +163,11 @@ export interface ActionLogEntry {
   ms: number;
 }
 
+export type WhatsAppDelivery =
+  | { mode: "mock"; note: string }
+  | { mode: "live"; provider: string; sid: string; status: string }
+  | { mode: "failed"; provider: string; error: string };
+
 export interface ComplianceCheckLine {
   rule: string;
   ref: string;
@@ -202,7 +207,7 @@ export type ServerEvent =
   | { type: "call"; merchantId: string; callId: string; state: CallState; transport: string }
   | { type: "transcript"; merchantId: string; callId: string; speaker: "saathi" | "merchant"; text: string }
   | { type: "latency"; merchantId: string; callId: string; latency: TurnLatency }
-  | { type: "whatsapp"; merchantId: string; to: string; toName: string; text: string; at: string }
+  | { type: "whatsapp"; merchantId: string; to: string; toName: string; text: string; at: string; delivery: WhatsAppDelivery }
   | { type: "approval"; approval: ApprovalRequest };
 
 /** What the dashboard renders. Derived from the store, never mutated by clients. */

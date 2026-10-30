@@ -7,6 +7,7 @@ import type { MerchantStore } from "../../backend/src/store.js";
 import type { CallState, Language, TurnLatency } from "../../shared/types.js";
 import { pcm16ToWav, splitSentences } from "./audio.js";
 import type { SpeechClient } from "./speech.js";
+import type { WhatsAppSender } from "../../whatsapp/src/client.js";
 
 /** Events a transport (browser page, Twilio stream, recorder) receives from a call session. */
 export type CallEvent =
@@ -24,6 +25,8 @@ export interface CallSessionDeps {
   llm: ChatClient;
   speech: SpeechClient;
   bus?: EventBus;
+  whatsapp?: WhatsAppSender;
+  customerPhones?: Record<string, string>;
   transport: string;
   /** Delivered in order; audio chunks for one turn share a `seq`. */
   onEvent: (e: CallEvent) => void;
@@ -52,7 +55,7 @@ export class CallSession {
   constructor(private readonly deps: CallSessionDeps) {
     const merchant = deps.store.get(deps.merchantId);
     this.language = merchant.language;
-    this.agent = new SaathiAgent({ llm: deps.llm, store: deps.store, clock: deps.clock, merchantId: deps.merchantId, callId: this.callId, ...(deps.bus ? { bus: deps.bus } : {}), ...(deps.log ? { log: deps.log } : {}) });
+    this.agent = new SaathiAgent({ llm: deps.llm, store: deps.store, clock: deps.clock, merchantId: deps.merchantId, callId: this.callId, ...(deps.bus ? { bus: deps.bus } : {}), ...(deps.whatsapp ? { whatsapp: deps.whatsapp } : {}), ...(deps.customerPhones ? { customerPhones: deps.customerPhones } : {}), ...(deps.log ? { log: deps.log } : {}) });
   }
 
   get currentState(): CallState {

@@ -13,6 +13,8 @@ export interface AgentDeps {
   merchantId: string;
   callId: string;
   bus?: EventBus;
+  whatsapp?: ToolContext["whatsapp"];
+  customerPhones?: ToolContext["customerPhones"];
   /** Tools visible to the model. Defaults to all registered tools. */
   tools?: readonly { name: string; description: string; parameters: ToolSpec["parameters"] }[];
   maxToolRounds?: number;
@@ -45,7 +47,7 @@ export class SaathiAgent {
     const merchant = deps.store.get(deps.merchantId);
     this.messages.push({ role: "system", content: systemPrompt(merchant) });
     this.toolSpecs = (deps.tools ?? TOOLS).map((t) => ({ name: t.name, description: t.description, parameters: t.parameters }));
-    this.ctx = { store: deps.store, clock: deps.clock, merchantId: deps.merchantId, callId: deps.callId, ...(deps.bus ? { bus: deps.bus } : {}) };
+    this.ctx = { store: deps.store, clock: deps.clock, merchantId: deps.merchantId, callId: deps.callId, ...(deps.bus ? { bus: deps.bus } : {}), ...(deps.whatsapp ? { whatsapp: deps.whatsapp } : {}), ...(deps.customerPhones ? { customerPhones: deps.customerPhones } : {}) };
     this.maxRounds = deps.maxToolRounds ?? 6;
   }
 
@@ -85,7 +87,7 @@ export class SaathiAgent {
       }
       for (const call of res.toolCalls) {
         const started = Date.now();
-        const out = runToolByName(call.name, call.args, this.ctx);
+        const out = await runToolByName(call.name, call.args, this.ctx);
         turn.toolsMs += Date.now() - started;
         turn.toolCalls.push(out.entry);
         this.deps.log?.(`[${out.entry.actor}] ${call.name}(${JSON.stringify(call.args)}) -> ${out.ok ? "ok" : "FAILED"} ${out.entry.summary}`);

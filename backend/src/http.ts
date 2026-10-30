@@ -3,11 +3,14 @@ import type { Clock } from "./clock.js";
 import type { EventBus } from "./events.js";
 import { MerchantStore, NotFoundError } from "./store.js";
 import { runToolByName, TOOLS } from "./tools.js";
+import type { WhatsAppSender } from "../../whatsapp/src/client.js";
 
 export interface BackendDeps {
   store: MerchantStore;
   clock: Clock;
   bus: EventBus;
+  whatsapp?: WhatsAppSender;
+  customerPhones?: Record<string, string>;
 }
 
 /**
@@ -16,7 +19,7 @@ export interface BackendDeps {
  * can be driven from curl, tests, or a separately hosted agent.
  */
 export async function registerBackendRoutes(app: FastifyInstance, deps: BackendDeps): Promise<void> {
-  const { store, clock, bus } = deps;
+  const { store, clock, bus, whatsapp, customerPhones } = deps;
 
   app.get("/api/health", async () => ({ ok: true, clockIst: store.snapshot("m001").clockIst, merchants: store.list().length }));
 
@@ -43,7 +46,7 @@ export async function registerBackendRoutes(app: FastifyInstance, deps: BackendD
     } catch {
       return reply.code(404).send({ error: `merchant ${merchantId} not found` });
     }
-    const out = runToolByName(req.params.name, req.body?.args ?? {}, { store, clock, merchantId, bus, ...(req.body?.call_id ? { callId: req.body.call_id } : {}) });
+    const out = await runToolByName(req.params.name, req.body?.args ?? {}, { store, clock, merchantId, bus, ...(whatsapp ? { whatsapp } : {}), ...(customerPhones ? { customerPhones } : {}), ...(req.body?.call_id ? { callId: req.body.call_id } : {}) });
     return reply.code(out.ok ? 200 : 422).send({ ok: out.ok, actor: out.entry.actor, summary: out.entry.summary, result: out.result, ms: out.entry.ms });
   });
 

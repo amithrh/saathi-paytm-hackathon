@@ -146,7 +146,7 @@
       <div class="lat" id="lat"></div>
     </div>
     <div class="card">
-      <h2>WhatsApp to customer <small>mock channel</small></h2>
+      <h2>WhatsApp to customer <small id="waStatus">mock channel</small></h2>
       <div id="wa"><div class="empty">No message sent yet.</div></div>
     </div>
     <div class="card">
@@ -249,7 +249,12 @@
     $("lat").innerHTML = `<span>turn ${l.turn}</span><span>STT ${l.sttMs} ms</span><span>LLM ${l.llmMs} ms · ${l.llmCalls} calls</span><span>tools ${l.toolsMs} ms</span><span>TTS ${l.ttsMs} ms</span><span><b>total ${l.totalMs} ms</b></span>`;
   }
   function showWhatsapp(e) {
-    $("wa").innerHTML = `<div class="wa"><div class="to">To ${esc(e.toName)} · ${esc(e.to)}</div>${esc(e.text).replace(/(upi:\/\/\S+)/, '<u>$1</u>')}<span class="tick">✓✓ ${timeOf(e.at).slice(0, 5)}</span></div>`;
+    const d = e.delivery || { mode: "mock" };
+    const status = d.mode === "live" ? `sent via WhatsApp · ${esc(d.sid)} · ${esc(d.status)}` : d.mode === "failed" ? `live send failed: ${esc(d.error)}` : "mock channel";
+    const tick = d.mode === "live" ? "✓✓" : d.mode === "failed" ? "✕" : "✓";
+    $("waStatus").textContent = status;
+    $("waStatus").style.color = d.mode === "failed" ? "#dc2626" : d.mode === "live" ? "#166534" : "";
+    $("wa").innerHTML = `<div class="wa"><div class="to">To ${esc(e.toName)} · ${esc(e.to)}</div>${esc(e.text).replace(/(upi:\/\/\S+)/, '<u>$1</u>')}<span class="tick">${tick} ${timeOf(e.at).slice(0, 5)}</span></div>`;
   }
 
   function connect() {

@@ -14,6 +14,7 @@ import { registerTwilioRoutes } from "../twilio/src/routes.js";
 import { attachBrowserTransport } from "../voice/src/browser-transport.js";
 import { CallSession, type CallEvent } from "../voice/src/pipeline.js";
 import type { SpeechClient } from "../voice/src/speech.js";
+import type { WhatsAppSender } from "../whatsapp/src/client.js";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -25,13 +26,15 @@ export interface AppDeps {
   speech: SpeechClient;
   /** ms after a reminder before the mock customer pays; 0 disables. */
   simulatedPaymentDelayMs: number;
+  whatsapp?: WhatsAppSender;
+  customerPhones?: Record<string, string>;
   publicBaseUrl?: string;
   log?: (line: string) => void;
 }
 
 export function makeSessionFactory(deps: AppDeps, transport: string) {
   return (merchantId: string, onEvent: (e: CallEvent) => void): CallSession =>
-    new CallSession({ merchantId, store: deps.store, clock: deps.clock, llm: deps.llm, speech: deps.speech, bus: deps.bus, transport, onEvent, ...(deps.log ? { log: deps.log } : {}) });
+    new CallSession({ merchantId, store: deps.store, clock: deps.clock, llm: deps.llm, speech: deps.speech, bus: deps.bus, transport, onEvent, ...(deps.whatsapp ? { whatsapp: deps.whatsapp } : {}), ...(deps.customerPhones ? { customerPhones: deps.customerPhones } : {}), ...(deps.log ? { log: deps.log } : {}) });
 }
 
 /** Wires the mock customer who pays after a reminder, and snapshot/counter pushes on store changes. */
@@ -54,7 +57,7 @@ export function wireSimulations(deps: AppDeps): void {
   });
   if (deps.simulatedPaymentDelayMs > 0) {
     bus.subscribe((e) => {
-      if (e.type !== "whatsapp") return;
+      if (e.type !== "whatsapp" || e.delivery.mode === "live") return;
       const merchant = store.get(e.merchantId);
       const u = merchant.udhaar.find((x) => x.customerName === e.toName);
       if (!u) return;
@@ -76,7 +79,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   await app.register(fastifyStatic, { root: path.join(ROOT, "dashboard", "public"), prefix: "/dashboard/", decorateReply: true });
   await app.register(fastifyStatic, { root: path.join(ROOT, "voice", "public"), prefix: "/call/", decorateReply: false });
 
-  await registerBackendRoutes(app, { store: deps.store, clock: deps.clock, bus: deps.bus });
+  await registerBackendRoutes(app, { store: deps.store, clock: deps.clock, bus: deps.bus, ...(deps.whatsapp ? { whatsapp: deps.whatsapp } : {}), ...(deps.customerPhones ? { customerPhones: deps.customerPhones } : {}) });
   await registerTwilioRoutes(app, { makeSession: makeSessionFactory(deps, "twilio"), ...(deps.publicBaseUrl ? { publicBaseUrl: deps.publicBaseUrl } : {}), ...(deps.log ? { log: deps.log } : {}) });
 
   const callHtml = () => readFileSync(path.join(ROOT, "voice", "public", "call.html"), "utf8");

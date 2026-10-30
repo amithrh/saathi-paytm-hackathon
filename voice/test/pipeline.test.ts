@@ -68,7 +68,7 @@ describe("CallSession", () => {
     expect(store.get(RAVI_ID).udhaar.find((u) => u.customerId === "c-suresh")!.status).toBe("reminded");
     const latency = events.filter((e) => e.type === "latency") as Array<{ latency: { turn: number; totalMs: number } }>;
     expect(latency.map((l) => l.latency.turn)).toEqual([0, 1]);
-    expect(busEvents.some((e) => e.type === "whatsapp")).toBe(true);
+    expect(busEvents.some((e) => e.type === "whatsapp" && e.delivery.mode === "mock")).toBe(true);
     expect(busEvents.filter((e) => e.type === "call").map((e) => (e as { state: string }).state)).toEqual(["preparing", "ringing", "live"]);
 
     await session.handleUtterance(tone(200, 1, 16000));

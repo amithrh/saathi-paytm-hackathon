@@ -13,6 +13,6 @@
     "noEmit": true,
     "types": ["node"]
   },
-  "include": ["backend/**/*.ts", "agent/**/*.ts", "voice/**/*.ts", "twilio/**/*.ts", "server/**/*.ts", "scripts/**/*.ts", "shared/**/*.ts"],
+  "include": ["backend/**/*.ts", "agent/**/*.ts", "voice/**/*.ts", "twilio/**/*.ts", "whatsapp/**/*.ts", "server/**/*.ts", "scripts/**/*.ts", "shared/**/*.ts"],
   "exclude": ["node_modules", "deck-src"]
 }
