@@ -1,6 +1,7 @@
 {
   "version": "0.0.1",
   "configurations": [
-    { "name": "saathi", "runtimeExecutable": "env", "runtimeArgs": ["SAATHI_FAKE_NOW=2026-10-31T10:15:00+05:30", "SIMULATED_PAYMENT_DELAY_MS=15000", "npx", "tsx", "server/main.ts"], "port": 3000 }
+    { "name": "saathi", "runtimeExecutable": "env", "runtimeArgs": ["SAATHI_FAKE_NOW=2026-10-31T10:15:00+05:30", "SIMULATED_PAYMENT_DELAY_MS=15000", "npx", "tsx", "server/main.ts"], "port": 3000 },
+    { "name": "saathi-offline", "runtimeExecutable": "env", "runtimeArgs": ["SAATHI_OFFLINE=1", "SAATHI_FAKE_NOW=2026-10-31T10:15:00+05:30", "SIMULATED_PAYMENT_DELAY_MS=15000", "npx", "tsx", "server/main.ts"], "port": 3000 }
   ]
 }

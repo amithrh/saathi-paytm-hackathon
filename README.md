@@ -25,11 +25,13 @@ Closing line: "Other voice bots wait for questions. Saathi hunts for lost money 
 ```bash
 npm install
 cp .env.example .env        # put SARVAM_API_KEY in .env
-npm test                    # typecheck + 65 unit tests on the mock backend, agent loop, voice pipeline, Twilio transport
+npm test                    # typecheck + 86 unit tests on the mock backend, agent loop, voice pipeline, Twilio transport
 npm run demo                # one process: mock backend API, agent, call screen, dashboard, SSE
 ```
 
 Then open `http://localhost:3000/dashboard?merchant=m001` on the projector and `http://localhost:3000/call?merchant=m001` on the laptop. `?merchant=m002` is the Kannada merchant. The full talk track, judge lines, rehearsal checklist and fallback ladder are in [scripts/demo.md](scripts/demo.md).
+
+Offline survival: `npm run cache-tts` (once, online) pre-synthesises every line of the scripted scene into `recordings/cache/`; `npm run demo:offline` then runs the same tools and dashboard with a scripted brain and cached audio and no network at all (judge lines typed or via `record-demo`).
 
 Other commands:
 - `npm run record-demo` plays the scripted Ravi conversation through the speakers and drives the dashboard without a microphone (`--voice` sends the judge lines as synthesised audio so STT runs too; `--no-play` is the silent automated check; `--merchant m002` for Kannada). Saves a WAV and transcript under `recordings/`.
@@ -38,6 +40,12 @@ Other commands:
 - `npm run live:check` is the pre-flight for the phone and WhatsApp path: validates the Twilio credentials, that `DEMO_PHONE_NUMBER` is a verified caller ID on a trial account, that `PUBLIC_BASE_URL` reaches this server, and (with `--send`) sends one WhatsApp test message. Prints a pass/fail table.
 - WhatsApp sandbox one-time step: each phone that should receive a message sends `join <sandbox-code>` to +1 415 523 8886 (code in Twilio console under Messaging > Try it out). The opt-in lasts 72 hours, so do it on the morning of the demo.
 - Rehearsing after 21:00 IST: `SAATHI_FAKE_NOW=2026-10-31T10:15:00+05:30 npm run demo`, otherwise the compliance check correctly refuses outside calling hours.
+
+### Guardrails on screen
+- The compliance panel on the dashboard is driven by the structured `gates` array that `compliance_check` returns: AI disclosed, calling window 9 AM to 7 PM IST (TRAI TCCCPR 2025), consent with timestamp, Key Fact Statement (amount, APR, tenure, EMI), cooling-off 1 day (RBI Digital Lending Directions 2025), human approval pending. Disburse is a human-only button and even then only hands the file to the lending partner (sandbox).
+- Every rupee figure Saathi speaks is checked against the numbers returned by tools on that call; the verdict is a `number_audit` line in the action log. Each log line also names its ledger source.
+- Udhaar reminders carry a verified-merchant P2M UPI pay intent (merchant VPA, MCC, transaction reference), never a P2P collect request.
+- Deterministic triggers: device silent more than 30 minutes while inflows continue; settlement pending or failed past T+1; udhaar line older than 10 days. `GET /api/policy` lists them with what the model may not do.
 
 ### What is real and what is mocked
 - Real: Sarvam speech-to-text (`saarika:v2.5`), text-to-speech (`bulbul:v3`, speaker `priya`, Hindi and Kannada), reasoning and tool calling (`sarvam-105b-conversations`). The agent decides which tools to call; nothing in the conversation is scripted on the Saathi side.
