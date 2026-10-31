@@ -137,11 +137,11 @@ export class CallSession {
   }
 
   /** Typed fallback when the microphone is not usable. */
-  handleText(text: string): Promise<void> {
+  handleText(text: string, opts: { display?: string } = {}): Promise<void> {
     return this.enqueue(async () => {
       if (this.state !== "live") return;
       this.deps.onEvent({ type: "thinking", on: true });
-      await this.runTurn(text, 0, Date.now());
+      await this.runTurn(text, 0, Date.now(), opts.display);
     });
   }
 
@@ -152,9 +152,9 @@ export class CallSession {
     this.setState("ended");
   }
 
-  private async runTurn(merchantText: string, sttMs: number, started: number): Promise<void> {
+  private async runTurn(merchantText: string, sttMs: number, started: number, display?: string): Promise<void> {
     this.turnNo++;
-    this.sayTranscript("merchant", merchantText || "(unclear)");
+    this.sayTranscript("merchant", display ?? (merchantText || "(unclear)"));
     let turn: AgentTurn;
     try {
       turn = await this.agent.respond(merchantText);

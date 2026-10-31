@@ -37,7 +37,7 @@ export const SCENES: Record<string, SceneScript> = {
     goodbye: "ठीक है रवि जी, धन्यवाद। आपका दिन शुभ हो।",
     declined: "कोई बात नहीं रवि जी, जब ज़रूरत हो तब बताइएगा। और कुछ मदद करूँ?",
     unclear: "माफ़ कीजिए रवि जी, आवाज़ साफ़ नहीं आई। एक बार फिर से बोलिए?",
-    yesReminder: /रिमाइंडर|reminder|भेज/i,
+    yesReminder: /रिमाइंडर|reminder|भेज|^(हाँ|हां|यस|yes)/i,
     yesLoan: /लोन|loan|आगे बढ़ो|हाँ/i,
     bye: /धन्यवाद|ठीक है|bye|बस/i,
     no: /नहीं|मत|no\b/i,
@@ -54,7 +54,7 @@ export const SCENES: Record<string, SceneScript> = {
     goodbye: "ಸರಿ ಲಕ್ಷ್ಮಿ ಅವರೇ, ಧನ್ಯವಾದಗಳು. ಒಳ್ಳೆಯ ದಿನ ನಿಮ್ಮದಾಗಲಿ.",
     declined: "ಪರವಾಗಿಲ್ಲ ಲಕ್ಷ್ಮಿ ಅವರೇ, ಬೇಕಾದಾಗ ಹೇಳಿ. ಇನ್ನೇನಾದರೂ ಸಹಾಯ ಬೇಕಾ?",
     unclear: "ಕ್ಷಮಿಸಿ ಲಕ್ಷ್ಮಿ ಅವರೇ, ಸರಿಯಾಗಿ ಕೇಳಿಸಲಿಲ್ಲ. ಇನ್ನೊಮ್ಮೆ ಹೇಳ್ತೀರಾ?",
-    yesReminder: /ರಿಮೈಂಡರ್|reminder|ಕಳಿಸಿ/i,
+    yesReminder: /ರಿಮೈಂಡರ್|reminder|ಕಳಿಸಿ|^(ಹೌದು|yes)/i,
     yesLoan: /ಲೋನ್|loan|ಮುಂದುವರಿಸಿ|ಹೌದು/i,
     bye: /ಧನ್ಯವಾದ|ಸರಿ|bye|ಸಾಕು/i,
     no: /ಬೇಡ|ಇಲ್ಲ|no\b/i,
@@ -112,6 +112,7 @@ export class ScriptedBrain implements ChatClient {
       return this.say(s.opening);
     }
     if (last.role === "user") {
+      if (text.startsWith("[phone STT, low confidence")) return this.say(s.unclear);
       if (this.phase === "opening" && s.no.test(text)) {
         this.phase = "loan";
         return this.call("check_loan_eligibility", {});

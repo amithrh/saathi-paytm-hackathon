@@ -175,3 +175,60 @@ describe("turn-based phone call over /twilio/voice and /twilio/gather", () => {
     expect(again.body).toContain("already answered");
   });
 });
+
+describe("phone speech hardening", () => {
+  it("adds hints and the speech model to the Gather, and the flag drops the model", async () => {
+    const { speechModelFromEnv, SPEECH_HINTS } = await import("../src/turns.js");
+    const xml = playThenGatherTwiml({ audioUrls: [], actionUrl: "https://x/g", language: "hi-IN", hints: SPEECH_HINTS["hi-IN"], speechModel: "phone_call" });
+    expect(xml).toContain('speechModel="phone_call"');
+    expect(xml).toMatch(/hints="हाँ,हां,नहीं,भेजो,भेज दो,रिमाइंडर,लोन,चाहिए,[^"]*सुरेश,Suresh/);
+    expect(speechModelFromEnv({})).toBe("phone_call");
+    expect(speechModelFromEnv({ TWILIO_SPEECH_MODEL: "off" })).toBeUndefined();
+    expect(speechModelFromEnv({ TWILIO_SPEECH_MODEL: "experimental_conversations" })).toBe("experimental_conversations");
+    expect(SPEECH_HINTS["kn-IN"]).toContain("ಮಂಜುನಾಥ್");
+  });
+
+  it("wraps short or low-confidence results so the agent confirms instead of acting", async () => {
+    const { prepareMerchantText } = await import("../src/turns.js");
+    expect(prepareMerchantText("एप्स!", "0.12")).toMatchObject({ lowConfidence: true, display: "एप्स! (phone STT, 0.12)" });
+    expect(prepareMerchantText("एप्स!", "0.12").agentText).toMatch(/^\[phone STT, low confidence: heard "एप्स!"/);
+    expect(prepareMerchantText("इफेक्टिव", "0.89").lowConfidence).toBe(true); // one token
+    expect(prepareMerchantText("सुरेश को रिमाइंडर भेज दो", "0.31").lowConfidence).toBe(true); // low confidence
+    for (const yes of ["यस!", "हाँ", "Haan.", "ಹೌದು", "नहीं", "ठीक है"]) expect(prepareMerchantText(yes, "0.0")).toMatchObject({ agentText: yes, lowConfidence: false });
+    expect(prepareMerchantText("हाँ सुरेश को रिमाइंडर भेजो", "0.91")).toMatchObject({ agentText: "हाँ सुरेश को रिमाइंडर भेजो", lowConfidence: false });
+    expect(prepareMerchantText("हाँ लोन चाहिए", undefined).lowConfidence).toBe(false);
+  });
+
+  it("gather sends the wrapper to the agent and shows the raw tagged text on the transcript", async () => {
+    const clock = fixedClock("2026-10-31T10:15:00+05:30");
+    const store = MerchantStore.seeded(clock);
+    const bus = new EventBus();
+    const lines: string[] = [];
+    bus.subscribe((e) => {
+      if (e.type === "transcript" && e.speaker === "merchant") lines.push(e.text);
+    });
+    const seen: string[] = [];
+    const brain = new ScriptedBrain(RAVI_ID);
+    const spy = { complete: (m: Parameters<ScriptedBrain["complete"]>[0], t: Parameters<ScriptedBrain["complete"]>[1]) => { const u = [...m].reverse().find((x) => x.role === "user") as { content: string }; seen.push(u.content); return brain.complete(m, t); } };
+    const app = Fastify();
+    app.addContentTypeParser("application/x-www-form-urlencoded", { parseAs: "string" }, (_r, body, done) => done(null, Object.fromEntries(new URLSearchParams(String(body)))));
+    await registerTwilioRoutes(app, {
+      makeSession: (id, onEvent) => new CallSession({ merchantId: id, store, clock, llm: spy, speech: new FakeSpeechClient(), bus, transport: "phone", onEvent }),
+      env: { TWILIO_ACCOUNT_SID: "A", TWILIO_AUTH_TOKEN: "t", TWILIO_FROM_NUMBER: "+1", DEMO_PHONE_NUMBER: "+9", TWILIO_SPEECH_MODEL: "off" },
+      publicBaseUrl: "https://s.app",
+      fetchImpl: (async () => new Response(JSON.stringify({ sid: "CA", status: "queued" }), { status: 201 })) as typeof fetch,
+    });
+    await app.ready();
+    const token = (await app.inject({ method: "POST", url: "/twilio/call", payload: { merchantId: RAVI_ID } })).json().token as string;
+    const voice = await app.inject({ method: "POST", url: `/twilio/voice?token=${token}`, payload: "", headers: { "content-type": "application/x-www-form-urlencoded" } });
+    expect(voice.body).not.toContain("speechModel");
+    expect(voice.body).toContain('hints="हाँ');
+    await app.inject({ method: "POST", url: `/twilio/gather?token=${token}`, payload: new URLSearchParams({ SpeechResult: "एप्स!", Confidence: "0.12" }).toString(), headers: { "content-type": "application/x-www-form-urlencoded" } });
+    expect(seen.at(-1)).toMatch(/^\[phone STT, low confidence/);
+    expect(lines.at(-1)).toBe("एप्स! (phone STT, 0.12)");
+    expect(store.get(RAVI_ID).udhaar.find((u) => u.customerId === "c-suresh")!.status).toBe("outstanding"); // did not act on noise
+    await app.inject({ method: "POST", url: `/twilio/gather?token=${token}`, payload: new URLSearchParams({ SpeechResult: "यस!", Confidence: "0.0" }).toString(), headers: { "content-type": "application/x-www-form-urlencoded" } });
+    expect(store.get(RAVI_ID).udhaar.find((u) => u.customerId === "c-suresh")!.status).toBe("reminded");
+    await app.close();
+  });
+});

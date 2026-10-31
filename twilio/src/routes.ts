@@ -4,7 +4,7 @@ import type { CallEvent, CallSession } from "../../voice/src/pipeline.js";
 import { attachTwilioMediaStream, connectStreamTwiml } from "./media-stream.js";
 import { placeCall, twilioCredentialsFromEnv } from "./rest.js";
 import { pcm16ToWav } from "../../voice/src/audio.js";
-import { errorTwiml, joinForPhone, PhoneAudioStore, playThenGatherTwiml, playThenHangupTwiml, REPROMPT } from "./turns.js";
+import { errorTwiml, joinForPhone, PhoneAudioStore, playThenGatherTwiml as gatherTwiml, playThenHangupTwiml, prepareMerchantText, REPROMPT, SPEECH_HINTS, speechModelFromEnv, type GatherTwimlInput } from "./turns.js";
 
 export interface TwilioRouteDeps {
   makeSession: (merchantId: string, onEvent: (e: CallEvent) => void) => CallSession;
@@ -55,6 +55,8 @@ export async function registerTwilioRoutes(app: FastifyInstance, deps: TwilioRou
    * Default is the turn-based path: <Play> Sarvam audio, <Gather input="speech">, POST back, repeat.
    */
   const useMediaStreams = env.TWILIO_MEDIA_STREAMS === "1";
+  const speechModel = speechModelFromEnv(env);
+  const playThenGatherTwiml = (i: Omit<GatherTwimlInput, "hints" | "speechModel">) => gatherTwiml({ ...i, hints: SPEECH_HINTS[i.language], ...(speechModel ? { speechModel } : {}) });
   const audio = new PhoneAudioStore();
   const baseUrl = (host: string | undefined) => (deps.publicBaseUrl ?? `https://${host ?? "localhost"}`).replace(/\/$/, "");
 
@@ -140,7 +142,9 @@ export async function registerTwilioRoutes(app: FastifyInstance, deps: TwilioRou
         return reply.send(playThenGatherTwiml({ audioUrls: [await lineUrl(p, host, REPROMPT[p.session.language])], actionUrl: gatherUrl(host, token), language: p.session.language }));
       }
       p.empties = 0;
-      const urls = await captureTurn(p, host, () => p.session.handleText(said));
+      const heard = prepareMerchantText(said, req.body?.Confidence);
+      if (heard.lowConfidence) deps.log?.(`twilio: low-confidence result, asking the agent to confirm`);
+      const urls = await captureTurn(p, host, () => p.session.handleText(heard.agentText, { display: heard.display }));
       // agentEnded is settled before the first audio chunk exists, so it is safe to read here.
       if (p.session.agentEnded) {
         prepared.delete(token);
