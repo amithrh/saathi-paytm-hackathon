@@ -50,7 +50,7 @@ Click **Ring the merchant** on the call screen while you say that. The dashboard
 
 Dashboard: Compliance entry (7 checks: AI disclosure, 9 to 7 window, merchant consent, ledger line, 72-hour cap, transactional template, P2M link), then Fixer sends; the WhatsApp message appears in Hindi with a verified-merchant P2M link, labelled "no collect request". About 25 s later Suresh "pays" and Collected ticks. Say: "That is a P2M pay link, not a collect request; collect died last October. The WhatsApp send is mocked unless the sandbox is wired."
 
-**Saathi (about 30 s):** confirms the reminder went, then the loan: ₹50,000, because last year sales rose 34% around Diwali and Diwali is 8 days away, 6 months at 18% a year, about ₹9,080 a month, from a partner NBFC via Paytm, 3-day exit. Asks if he wants it.
+**Saathi (about 30 s):** confirms the reminder went, then the loan: ₹50,000, because last year sales rose 34% around Diwali and Diwali is 8 days away, 6 months at 18% a year, about ₹9,080 a month, from a partner NBFC via Paytm, 1-day cooling-off. Asks if he wants it.
 
 **Judge:** हाँ, लोन चाहिए, आगे बढ़ो।
 (Haan, loan chahiye, aage badho. "Yes, I want the loan, go ahead.")
