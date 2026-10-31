@@ -69,6 +69,18 @@ describe("demo controls", () => {
     expect([400, 503]).toContain(r.statusCode);
   });
 
+  it("start demo returns the stage hold times and refuses a second run for the same merchant", async () => {
+    deps.dialer = async () => ({ ok: true, callSid: "CA-fake", status: "queued" });
+    const r = await app.inject({ method: "POST", url: "/api/demo/start", payload: { merchantId: "m002" } });
+    expect(r.statusCode).toBe(202);
+    expect(r.json()).toMatchObject({ ok: true, merchantId: "m002", dashboardHoldMs: 8000, fleetHoldMs: 15000 });
+    const again = await app.inject({ method: "POST", url: "/api/demo/start", payload: { merchantId: "m002" } });
+    expect(again.statusCode).toBe(409);
+    expect((await app.inject({ method: "POST", url: "/api/demo/start", payload: { merchantId: "m002" }, headers: { "cf-connecting-ip": "1.2.3.4" } })).statusCode).toBe(403);
+    // The leak starts at once: Lakshmi's Soundbox is silent.
+    expect(store.get("m002").devices.find((d) => d.type === "soundbox")!.status).toBe("offline");
+  });
+
   it("reset restores the opening scene, keeps the clock, clears panels, and drops stale simulated payments", async () => {
     // Mid-scene state: device fixed, reminder sent above (a simulated payment is pending), loan offered.
     await app.inject({ method: "POST", url: "/api/tools/restart_device", payload: { merchant_id: RAVI_ID, args: { device_id: "SB-7F42" } } });

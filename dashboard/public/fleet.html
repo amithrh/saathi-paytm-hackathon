@@ -53,6 +53,11 @@
   .tile .down { margin-top:2px; border:0; border-radius:10px; padding:8px 10px; font:inherit; font-size:13px; font-weight:800; color:#fff; background:#b91c1c; cursor:pointer; }
   .tile .down:disabled { opacity:.5; cursor:not-allowed; }
   .tile .fb { font-size:13px; font-weight:800; color:#1d4ed8; }
+  .thread { display:flex; flex-direction:column; gap:3px; border-left:3px solid #e2e8f0; margin-left:4px; padding-left:8px; }
+  .thread div { font-size:12.5px; line-height:1.3; }
+  .thread b { font-size:10.5px; letter-spacing:.05em; text-transform:uppercase; color:#fff; padding:2px 5px; border-radius:5px; margin-right:5px; background:#64748b; }
+  .thread b.Diagnoser { background:var(--purple); } .thread b.Fixer { background:var(--green); } .thread b.Seller { background:#1d4ed8; } .thread b.Compliance { background:var(--amber); } .thread b.Manager { background:#0f172a; } .thread b.Human { background:#db2777; }
+  .tile.follow { outline:4px solid #1d4ed8; outline-offset:3px; }
   footer { margin:0 32px 18px; color:var(--muted); font-size:14px; display:flex; justify-content:space-between; gap:12px; }
   #ctlMsg { font-size:14px; }
 </style>
@@ -63,7 +68,13 @@
   <span class="spacer"></span>
   <span class="pill" id="clock">–</span>
   <span id="ctlMsg"></span>
-  <button id="startScene" hidden>Start fleet scene</button>
+  <span id="startGrp" hidden style="display:inline-flex;gap:8px;align-items:center">
+    <select id="startWho" style="font:inherit;font-size:15px;padding:9px 10px;border-radius:10px;border:0">
+      <option value="m001">Ravi · हिंदी</option><option value="m002">Lakshmi · ಕನ್ನಡ</option>
+    </select>
+    <button id="startDemo">▶ Start demo</button>
+  </span>
+  <button id="startScene" class="ghost" hidden>Fleet scene (60 s)</button>
   <a class="btn ghost" href="/dashboard?merchant=m001">Ravi's dashboard</a>
 </header>
 <section class="score">
@@ -82,6 +93,11 @@
   const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   const inr = (n) => "₹" + Math.round(n).toLocaleString("en-IN");
   const ROLES = ["Diagnoser", "Fixer", "Seller", "Compliance", "Manager"];
+  const params = new URLSearchParams(location.search);
+  let followId = params.get("follow");
+  let followFrom = Number(params.get("from") || 0);
+  let followBack = Number(params.get("back") || 2000);
+  const threads = {}; // merchantId -> [{ role, text }], built from real action events
   let fleetIds = new Set();
   let controls = false;
   const live = {}; // merchantId -> { role, text } from the latest action
@@ -106,7 +122,8 @@
       const l = live[t.id] || {};
       const role = t.role || l.role;
       const text = t.role ? t.text : l.text || t.text;
-      return `<div class="tile ${t.status}" data-id="${t.id}">
+      const th = (threads[t.id] || []).slice(-6);
+      return `<div class="tile ${t.status}${t.id === followId ? " follow" : ""}" data-id="${t.id}">
         <h3>${esc(t.shopName)}</h3>
         <div class="meta">${esc(t.area)} · ${esc(t.language)}</div>
         <div class="dots">
@@ -118,6 +135,7 @@
         <div class="roles">${ROLES.map((r) => `<span class="${r}${r === role ? " on" : ""}">${r}</span>`).join("")}</div>
         <div class="what">${esc(text)}</div>
         <div class="trig">${t.trigger ? "⚑ " + esc(t.trigger) : ""}</div>
+        ${th.length && t.status !== "green" ? `<div class="thread">${th.map((x) => `<div><b class="${x.role}">${x.role}</b>${esc(x.text)}</div>`).join("")}</div>` : ""}
         ${t.fallbackUrl ? `<a class="fb" href="${esc(t.fallbackUrl)}" target="_blank" rel="noopener">Open laptop call screen →</a>` : ""}
         ${controls ? `<button class="down" data-down="${t.id}">Bring Soundbox down</button>` : ""}
       </div>`;
@@ -143,14 +161,25 @@
     if (typeof e.seq === "number") { if (e.seq <= lastSeq) return; lastSeq = e.seq; }
     const id = e.type === "action" ? e.entry.merchantId : e.type === "approval" ? e.approval.merchantId : e.merchantId;
     if (fleetIds.size && !fleetIds.has(id)) return;
-    if (e.type === "action" && ["Diagnoser", "Fixer", "Seller", "Compliance", "Manager"].includes(e.entry.actor)) live[id] = { role: e.entry.actor, text: `${e.entry.actor}: ${e.entry.summary}` };
-    if (e.type === "reset") delete live[id];
+    if (e.type === "action" && ["Diagnoser", "Fixer", "Seller", "Compliance", "Manager", "Human"].includes(e.entry.actor)) {
+      if (e.entry.actor !== "Human") live[id] = { role: e.entry.actor, text: `${e.entry.actor}: ${e.entry.summary}` };
+      if (!followId || id !== followId || (e.seq || 0) > followFrom) {
+        const text = e.entry.summary.length > 92 ? e.entry.summary.slice(0, 90) + "…" : e.entry.summary;
+        (threads[id] = threads[id] || []).push({ role: e.entry.actor, text });
+      }
+      if (followId && id === followId && e.entry.tool === "dial" && (e.seq || 0) > followFrom) {
+        const go = followId;
+        setTimeout(() => { location.href = `/dashboard?merchant=${encodeURIComponent(go)}`; }, followBack);
+      }
+    }
+    if (e.type === "approval") (threads[id] = threads[id] || []).push({ role: "Human", text: `approval ${e.approval.status}: ${e.approval.action.replace(/_/g, " ")}` });
+    if (e.type === "reset") { delete live[id]; delete threads[id]; }
     if (["action", "fleet", "merchant", "counters", "reset", "call", "approval"].includes(e.type)) refresh();
   }
   function poll() { fetch(`/api/fleet/events?since=${lastSeq}`).then((r) => r.json()).then((d) => { for (const e of d.events) handle(e); if (!streamAlive) $("conn").textContent = "live (poll)"; }).catch(() => ($("conn").textContent = "reconnecting…")); }
   function startPolling() { if (!pollTimer) { poll(); pollTimer = setInterval(poll, 1200); } }
   function connect() {
-    fetch("/api/fleet").then((r) => r.json()).then((snap) => { render(snap); return fetch("/api/fleet/events?since=0"); }).then((r) => r.json()).then((d) => { lastSeq = d.next; }).catch(() => {});
+    fetch("/api/fleet").then((r) => r.json()).then((snap) => { render(snap); return fetch("/api/fleet/events?since=0"); }).then((r) => r.json()).then((d) => { for (const e of d.events) handle(e); refresh(); }).catch(() => {});
     const es = new EventSource("/events");
     es.onopen = () => ($("conn").textContent = "live");
     es.onerror = () => { $("conn").textContent = "reconnecting…"; startPolling(); };
@@ -159,7 +188,19 @@
   }
 
   // Demo control: same local-only / key guard as the dashboard strip.
-  fetch("/api/demo/config", { headers: demoKey ? { "X-Demo-Key": demoKey } : {} }).then((r) => r.json()).then((c) => { if (c.controls) { controls = true; $("startScene").hidden = false; refresh(); } }).catch(() => {});
+  fetch("/api/demo/config", { headers: demoKey ? { "X-Demo-Key": demoKey } : {} }).then((r) => r.json()).then((c) => { if (c.controls) { controls = true; $("startScene").hidden = false; $("startGrp").hidden = false; refresh(); } }).catch(() => {});
+  // One click from the fleet: the chosen merchant's tile goes red, roles work it, Manager dials,
+  // and the page follows the merchant to its dashboard when the phone starts ringing.
+  $("startDemo").addEventListener("click", async () => {
+    const who = $("startWho").value;
+    $("startDemo").disabled = true; $("ctlMsg").textContent = "";
+    const r = await fetch("/api/demo/start", { method: "POST", headers: { "Content-Type": "application/json", ...(demoKey ? { "X-Demo-Key": demoKey } : {}) }, body: JSON.stringify({ merchantId: who }) });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) { $("ctlMsg").textContent = j.error || `HTTP ${r.status}`; $("startDemo").disabled = false; return; }
+    followId = who; followFrom = lastSeq; followBack = j.returnAfterDialMs || 2000;
+    refresh();
+  });
+
   $("startScene").addEventListener("click", async () => {
     $("startScene").disabled = true; $("ctlMsg").textContent = "";
     const r = await fetch("/api/demo/fleet-scene", { method: "POST", headers: { "Content-Type": "application/json", ...(demoKey ? { "X-Demo-Key": demoKey } : {}) }, body: "{}" });

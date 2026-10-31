@@ -126,6 +126,9 @@
   .credit .comp b { text-align:right; font-variant-numeric:tabular-nums; }
   .credit .comp span small { display:block; color:var(--muted); font-size:11px; }
   .credit .need { font-size:12.5px; margin-top:4px; color:#92400e; } .credit .foot { font-size:11px; color:var(--muted); margin-top:4px; }
+  #leak { margin:14px 36px 0; padding:14px 22px; border-radius:16px; background:#dc2626; color:#fff; font-size:24px; font-weight:800; display:flex; align-items:center; gap:14px; animation:blink 1.2s infinite; }
+  #leak small { font-size:15px; font-weight:600; opacity:.9; }
+  #controls button.go { background:#16a34a; font-size:16px; padding:11px 20px; }
   #controls { background:#0b2352; color:#e2e8f0; padding:8px 36px; display:flex; flex-wrap:wrap; align-items:center; gap:10px 18px; font-size:14px; }
   #controls .grp { display:flex; align-items:center; gap:8px; }
   #controls .lab { font-size:12px; letter-spacing:.12em; text-transform:uppercase; color:#93c5fd; font-weight:800; }
@@ -144,7 +147,7 @@
 </head>
 <body>
 <header>
-  <div class="brand"><b><i></i>Saathi</b><span>Autonomous service and sales teammate · resolves before a ticket exists · human approves the money step</span></div>
+  <div class="brand"><b><i></i>Saathi <a href="/fleet" style="font-size:14px;font-weight:700;color:#bae6fd;margin-left:12px;text-decoration:none">← Back to fleet</a></b><span>Autonomous service and sales teammate · resolves before a ticket exists · human approves the money step</span></div>
   <div class="shop">
     <h1 id="shopName">…</h1>
     <div class="meta" id="shopMeta"></div>
@@ -153,6 +156,7 @@
   <div class="pill" id="clock">–</div>
 </header>
 <div id="controls">
+  <button class="go" id="ctlStart" hidden>▶ Start demo</button>
   <div class="grp seg"><span class="lab">Merchant</span><a href="#" data-m="m001">Ravi · हिंदी</a><a href="#" data-m="m002">Lakshmi · ಕನ್ನಡ</a></div>
   <div class="grp" id="ctlCall" hidden><span class="lab">Merchant phone</span><input id="ctlPhone" inputmode="tel" autocomplete="off"><button class="green" id="ctlRing">Ring the merchant's phone</button><span class="cst" id="ctlCallSt"></span></div>
   <div class="grp" id="ctlWa" hidden><span class="lab" id="ctlWaLab">Customer's WhatsApp</span><input id="ctlCust" inputmode="tel" autocomplete="off"><button class="ghost" id="ctlWaTest">Send test WhatsApp</button><span class="hint" id="ctlHint"></span><span class="cst" id="ctlWaSt"></span></div>
@@ -164,6 +168,7 @@
   <a class="btn ghost" id="ctlCallScreen" target="_blank" rel="noopener">Open laptop call screen</a>
   <button class="danger" id="ctlReset" hidden>Reset scene</button>
 </div>
+<div id="leak" hidden></div>
 <main>
   <section class="score">
     <div class="top"><h2>This week · rupees Saathi moved for <span id="scoreShop" style="color:var(--ink);text-transform:none;letter-spacing:0">this shop</span></h2><span id="scoreNote">Monday to now · live</span></div>
@@ -269,7 +274,7 @@
     $("tYest").textContent = inr(t.yesterday); $("tYestN").textContent = `${t.yesterdayCount} settled lines · same day last week ${inr(t.sameDayLastWeek)}`;
     $("devices").innerHTML = s.devices.map((d) => {
       const ev = d.lastEvent;
-      const info = ev ? (ev.kind === "offline" ? `${esc(ev.note)}` : ev.kind === "restart" ? `Restarted ${timeOf(ev.at).slice(0, 5)} · ${ev.unconfirmed ? ev.unconfirmed.count + " payments (" + inr(ev.unconfirmed.amount) + ") confirmed to the merchant" : "online"}` : ev.note) : `Heartbeat ${timeOf(d.lastHeartbeat).slice(0, 5)}`;
+      const info = ev ? (ev.kind === "offline" ? `${esc(ev.note)}${ev.unconfirmed && ev.unconfirmed.count ? ` · <b style="color:#dc2626">${ev.unconfirmed.count} payments, ${inr(ev.unconfirmed.amount)} unannounced</b>` : ""}` : ev.kind === "restart" ? `Restarted ${timeOf(ev.at).slice(0, 5)} · ${ev.unconfirmed ? ev.unconfirmed.count + " payments (" + inr(ev.unconfirmed.amount) + ") confirmed to the merchant" : "online"}` : ev.note) : `Heartbeat ${timeOf(d.lastHeartbeat).slice(0, 5)}`;
       return `<div class="dev"><span class="st ${d.status}"></span><div><div class="name">${d.type === "soundbox" ? "Soundbox" : d.type.toUpperCase()} ${esc(d.id)}</div><div class="info">${info}</div></div><span class="badge ${d.status}">${d.status === "offline" ? "silent" : d.status}</span></div>`;
     }).join("");
     for (const x of s.settlements.filter((x) => x.status !== "settled")) $("devices").innerHTML += `<div class="dev"><span class="st offline"></span><div><div class="name">Settlement ${esc(x.id)}</div><div class="info">${inr(x.amount)} · ${esc(x.failureReason || "")}</div></div><span class="badge offline">${x.status}</span></div>`;
@@ -283,6 +288,18 @@
     renderApprovals(s.approvals, s.loanOffers);
     setCounters(s.counters);
     renderCredit(s.credit, s.cashNeed);
+    renderLeak(s);
+  }
+
+  let leakActive = false;
+  function renderLeak(snap) {
+    const s = snap || latestSnapshot;
+    if (!s) return;
+    const d = s.devices.find((x) => x.status === "offline" && x.lastEvent && x.lastEvent.kind === "offline");
+    if (!leakActive || !d) { $("leak").hidden = true; return; }
+    const u = d.lastEvent.unconfirmed || { count: 0, amount: 0 };
+    $("leak").hidden = false;
+    $("leak").innerHTML = `⚠ Leak detected: Soundbox ${esc(d.id)} silent, ${inr(u.amount)} unannounced <small>${u.count} payments landed with no announcement · Diagnoser on it</small>`;
   }
 
   function renderCredit(c, need) {
@@ -418,7 +435,7 @@
 
   ctlFetch(`/api/demo/config?merchant=${encodeURIComponent(merchantId)}`).then((c) => {
     if (!c.controls) { $("ctlLocked").hidden = false; return; }
-    $("ctlCall").hidden = false; $("ctlReset").hidden = false; $("ctlFleet").hidden = false; $("ctlDown").hidden = false;
+    $("ctlCall").hidden = false; $("ctlReset").hidden = false; $("ctlFleet").hidden = false; $("ctlDown").hidden = false; $("ctlStart").hidden = false;
     $("ctlPhone").dataset.value = c.demoPhone; maskedInput($("ctlPhone"));
     if (!c.twilioConfigured) { $("ctlRing").disabled = true; status("ctlCallSt", "Twilio not configured in .env", "err"); }
     if (c.customer) {
@@ -467,6 +484,18 @@
     $("ctlFleet").disabled = true;
     try { await ctlFetch("/api/demo/fleet-scene", {}); location.href = "/fleet"; }
     catch (e) { status("ctlCallSt", e.message, "err"); $("ctlFleet").disabled = false; }
+  });
+
+  // One click: leak grows here, page moves to the fleet while the roles work it, Manager dials, page comes back.
+  $("ctlStart").addEventListener("click", async () => {
+    $("ctlStart").disabled = true;
+    try {
+      const r = await ctlFetch("/api/demo/start", { merchantId, to: $("ctlPhone").dataset.value || undefined });
+      leakActive = true;
+      status("ctlCallSt", "Demo running: leak on this shop, then the fleet view", "ok");
+      const from = lastSeq;
+      setTimeout(() => { location.href = `/fleet?follow=${encodeURIComponent(merchantId)}&from=${from}&back=${r.returnAfterDialMs}`; }, r.dashboardHoldMs);
+    } catch (e) { status("ctlCallSt", e.message, "err"); $("ctlStart").disabled = false; }
   });
 
   $("ctlDown").addEventListener("click", async () => {
@@ -543,7 +572,8 @@
         case "merchant": renderSnapshot(e.snapshot); break;
         case "counters": setCounters(e.counters); break;
         case "action": addLog(e.entry); break;
-        case "reset": onReset(); break;
+        case "reset": onReset(); leakActive = false; renderLeak(); break;
+        case "fleet": if (e.status === "red" && e.role === "Diagnoser") { leakActive = true; renderLeak(); } if (e.status === "green") { leakActive = false; renderLeak(); } break;
         case "call": setCall(e.state, e.transport); controlsCallState(e.state, e.transport); if (e.state === "preparing") { $("chat").innerHTML = ""; chatCount = 0; } break;
         case "transcript": addChat(e.speaker, e.text); break;
         case "latency": setLatency(e.latency); break;

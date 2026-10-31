@@ -112,7 +112,8 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
 
   const callHtml = () => readFileSync(path.join(ROOT, "voice", "public", "call.html"), "utf8");
   const dashHtml = () => readFileSync(path.join(ROOT, "dashboard", "public", "index.html"), "utf8");
-  app.get("/", async (_req, reply) => reply.type("text/html").send(indexHtml()));
+  app.get("/", async (_req, reply) => reply.redirect("/fleet"));
+  app.get("/links", async (_req, reply) => reply.type("text/html").send(indexHtml()));
   app.get("/call", async (_req, reply) => reply.type("text/html").send(callHtml()));
   app.get("/dashboard", async (_req, reply) => reply.type("text/html").send(dashHtml()));
   app.get("/fleet", async (_req, reply) => reply.type("text/html").send(readFileSync(path.join(ROOT, "dashboard", "public", "fleet.html"), "utf8")));

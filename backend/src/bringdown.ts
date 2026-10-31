@@ -39,6 +39,8 @@ export interface BringDownDeps {
   /** Phone to ring; the dialer falls back to DEMO_PHONE_NUMBER. */
   to?: string;
   speed?: number;
+  /** Override pacing (the one-click stage demo spreads beats over its hold times). */
+  timings?: { paymentEveryMs?: number; beatMs?: number };
   sleep?: (ms: number) => Promise<void>;
   toolExtras?: Pick<ToolContext, "whatsapp" | "customerPhones">;
   log?: (line: string) => void;
@@ -69,6 +71,7 @@ export async function bringSoundboxDown(d: BringDownDeps): Promise<BringDownOutc
     await sleep(ms * speed);
     if (store.generation !== gen) throw new Error("scene reset");
   };
+  const T = { paymentEveryMs: d.timings?.paymentEveryMs ?? BRING_DOWN_TIMINGS.paymentEveryMs, beatMs: d.timings?.beatMs ?? BRING_DOWN_TIMINGS.beatMs };
   const ctx: ToolContext = { store, clock, bus, merchantId: id, callId: "bring-down", ...(d.toolExtras ?? {}) };
   const note = (actor: Actor, tool: string, summary: string, source?: string) =>
     bus.publish({ type: "action", entry: { id: `B-${id}-${tool}-${Date.now()}`, at: clock.now().toISOString(), merchantId: id, actor, tool, args: {}, ok: true, summary, ...(source ? { source } : {}), ms: 0 } });
@@ -81,18 +84,18 @@ export async function bringSoundboxDown(d: BringDownDeps): Promise<BringDownOutc
     monitor.set(id, { status: "red", role: "Diagnoser", trigger, text: "Diagnoser: heartbeat stopped, watching payments" });
     let un = { count: 0, amount: 0 };
     for (const amount of BRING_DOWN_TIMINGS.payments) {
-      await wait(BRING_DOWN_TIMINGS.paymentEveryMs);
+      await wait(T.paymentEveryMs);
       un = store.addUnannouncedPayment(id, amount);
       monitor.set(id, { status: "red", role: "Diagnoser", trigger, text: `Diagnoser: ${un.count} payments, ${inr(un.amount)} landed unannounced` });
     }
     // The unannounced total includes anything already silent from before (Ravi's overnight 7 payments).
     const pending = [...(store.get(id).devices.find((x) => x.id === sb.id)?.events ?? [])].reverse().find((e) => e.kind === "offline")?.unconfirmed ?? un;
-    note("Diagnoser", "trigger_fired", `Device silent while ${pending.count} payments (${inr(pending.amount)}) landed unannounced: customers heard nothing`, `demo threshold ${Math.round((BRING_DOWN_TIMINGS.paymentEveryMs * BRING_DOWN_TIMINGS.payments.length * speed) / 1000)} s; production rule is 30 min`);
+    note("Diagnoser", "trigger_fired", `Device silent while ${pending.count} payments (${inr(pending.amount)}) landed unannounced: customers heard nothing`, `demo threshold ${Math.round((T.paymentEveryMs * BRING_DOWN_TIMINGS.payments.length * speed) / 1000)} s; production rule is 30 min`);
     await runToolByName("get_briefing", {}, ctx);
-    await wait(BRING_DOWN_TIMINGS.beatMs);
+    await wait(T.beatMs);
     monitor.set(id, { status: "red", role: "Fixer", trigger, text: `Fixer: restarting ${sb.id}` });
     await runToolByName("restart_device", { device_id: sb.id }, ctx);
-    await wait(BRING_DOWN_TIMINGS.beatMs);
+    await wait(T.beatMs);
     note("Compliance", "compliance_note", "No customer contact needed for the device fix; logged", "Saathi policy: service fixes need no consent ticket");
 
     const m = store.get(id);
@@ -103,7 +106,7 @@ export async function bringSoundboxDown(d: BringDownDeps): Promise<BringDownOutc
       monitor.clear(id, { status: "green", role: "Fixer", text: `Fixed: ${inr(pending.amount)} confirmed, no call needed` });
       return { unannounced: pending, escalated: false };
     }
-    await wait(BRING_DOWN_TIMINGS.beatMs);
+    await wait(T.beatMs);
     note("Manager", "escalate_to_call", `Escalating to a call: ${inr(pending.amount)} the merchant never heard about, and udhaar ${oldest} days old needs the merchant's yes`, "rule: unannounced money plus udhaar ≥ 10 days → talk to the merchant");
     monitor.set(id, { status: "amber", role: "Manager", trigger, text: `Manager: escalating to a call · calling ${first}` });
     const dial = await d.dial(id, d.to);

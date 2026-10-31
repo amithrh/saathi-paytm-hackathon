@@ -29,6 +29,17 @@ export function isTrustedControl(req: FastifyRequest, env: NodeJS.ProcessEnv): b
   return given === key;
 }
 
+/**
+ * One-click stage demo. Dashboard shows the leak growing for `dashboardHoldMs`, then the page moves to
+ * /fleet where the roles work it over `fleetHoldMs`; the Manager dials and the page returns to the dashboard.
+ */
+export const STAGE_DEMO = {
+  dashboardHoldMs: 8_000,
+  fleetHoldMs: 15_000,
+  /** Pause on the fleet after the Manager dials, before returning to the dashboard. */
+  returnAfterDialMs: 2_000,
+} as const;
+
 export const normalisePhone = (s: string) => s.replace(/[\s()-]/g, "");
 export const isE164 = (s: string) => /^\+\d{8,15}$/.test(s);
 
@@ -130,6 +141,36 @@ export async function registerDemoRoutes(app: FastifyInstance, deps: AppDeps, en
       ...(deps.log ? { log: deps.log } : {}),
     }).catch((e) => deps.log?.(`bring-down error: ${(e as Error).message}`));
     return reply.code(202).send({ ok: true, merchantId });
+  });
+
+  /** The one-click stage sequence. The browser drives the page moves using the hold times returned here. */
+  app.post<{ Body: { merchantId?: string; to?: string } | undefined }>("/api/demo/start", async (req, reply) => {
+    if (!isTrustedControl(req, env)) return reply.code(403).send(deny);
+    const merchantId = req.body?.merchantId ?? "m001";
+    try {
+      deps.store.get(merchantId);
+    } catch {
+      return reply.code(404).send({ error: `unknown merchant ${merchantId}` });
+    }
+    if (bringDownRunning(merchantId)) return reply.code(409).send({ error: "demo already running for this merchant" });
+    const to = req.body?.to ? normalisePhone(req.body.to) : undefined;
+    if (to && !isE164(to)) return reply.code(400).send({ error: `not an international number: ${to}` });
+    const payments = 8;
+    // The fleet hold covers the four role beats plus the moment before the dial.
+    const beatMs = Math.round(STAGE_DEMO.fleetHoldMs / 5);
+    void bringSoundboxDown({
+      store: deps.store,
+      clock: deps.clock,
+      bus: deps.bus,
+      monitor: deps.monitor!,
+      merchantId,
+      dial: deps.dialer!,
+      ...(to ? { to } : {}),
+      timings: { paymentEveryMs: Math.round(STAGE_DEMO.dashboardHoldMs / payments), beatMs },
+      toolExtras: { ...(deps.whatsapp ? { whatsapp: deps.whatsapp } : {}), ...(deps.customerPhones ? { customerPhones: deps.customerPhones } : {}) },
+      ...(deps.log ? { log: deps.log } : {}),
+    }).catch((e) => deps.log?.(`start demo error: ${(e as Error).message}`));
+    return reply.code(202).send({ ok: true, merchantId, ...STAGE_DEMO });
   });
 
   /** Back to the opening scene: reseeded store, cleared live panels, clock untouched. */

@@ -40,8 +40,38 @@ export class MerchantStore {
     for (const m of merchants) this.merchants.set(m.id, m);
   }
 
-  static seeded(clock: Clock): MerchantStore {
-    return new MerchantStore(clock, buildMerchants(istDate(clock.now())));
+  /**
+   * Calm opening: every fleet merchant healthy at the start (no overnight Soundbox outage for Ravi, no failed
+   * settlement for Lakshmi). The stage demo then injects the leak live. Off by default so tests, the offline
+   * fallback and record-demo keep the overnight scene their cached audio describes.
+   */
+  calmOpening = false;
+
+  static seeded(clock: Clock, opts: { calmOpening?: boolean } = {}): MerchantStore {
+    const s = new MerchantStore(clock, buildMerchants(istDate(clock.now())));
+    if (opts.calmOpening) {
+      s.calmOpening = true;
+      s.applyCalmOpening();
+    }
+    return s;
+  }
+
+  private applyCalmOpening(): void {
+    const today = istDate(this.clock.now());
+    for (const m of this.merchants.values()) {
+      if (m.id !== "m001" && m.id !== "m002") continue;
+      for (const d of m.devices) {
+        d.status = "online";
+        d.events = [];
+        d.lastHeartbeat = istInstant(today, 8, 5).toISOString();
+      }
+      for (const st of m.settlements) {
+        if (st.status === "settled") continue;
+        st.status = "settled";
+        st.bankRef = `UTR${String(st.amount).padStart(6, "0")}${st.date.replace(/-/g, "")}`;
+        delete st.failureReason;
+      }
+    }
   }
 
   /**
@@ -51,6 +81,7 @@ export class MerchantStore {
   reset(): void {
     this.merchants.clear();
     for (const m of buildMerchants(istDate(this.clock.now()))) this.merchants.set(m.id, m);
+    if (this.calmOpening) this.applyCalmOpening();
     this.tickets.clear();
     this.approvals.clear();
     this.generation++;

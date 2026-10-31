@@ -20,7 +20,10 @@ if (!apiKey && !offline) {
   process.exit(1);
 }
 const clock = clockFromEnv();
-const store = MerchantStore.seeded(clock);
+// Live demo opens calm (all fleet tiles green; Start demo injects the leak). Offline keeps the overnight scene
+// its cached audio describes. DEMO_OPENING=overnight restores the old opening on the live server.
+const calmOpening = process.env.SAATHI_OFFLINE !== "1" && process.env.DEMO_OPENING !== "overnight";
+const store = MerchantStore.seeded(clock, { calmOpening });
 const bus = new EventBus();
 const log = (line: string) => console.log(`${new Date().toISOString().slice(11, 19)} ${line}`);
 const useFakeSpeech = process.env.SAATHI_FAKE_SPEECH === "1";
@@ -50,9 +53,11 @@ await app.listen({ port, host: "0.0.0.0" });
 const snap = store.snapshot("m001");
 console.log(`
 Saathi demo server
+  Fleet (home):           http://localhost:${port}/fleet
   Dashboard (projector):  http://localhost:${port}/dashboard?merchant=m001
   Call screen (laptop):   http://localhost:${port}/call?merchant=m001
   Kannada merchant:       add ?merchant=m002 to either page
+  Opening:                ${calmOpening ? "calm (all tiles green; Start demo on /fleet injects the leak)" : "overnight leaks (Ravi's Soundbox since 18:02, Lakshmi's settlement)"}
   Clock:                  ${snap.clockIst}${process.env.SAATHI_FAKE_NOW ? " (pinned by SAATHI_FAKE_NOW)" : ""}
   Mode:                   ${offline ? "OFFLINE: scripted scene + cached audio, typed judge lines only" : "LIVE: Sarvam LLM with tool calling"}
   Speech:                 ${useFakeSpeech ? "FAKE (tones)" : offline ? "cached WAVs from recordings/cache" : "Sarvam bulbul:v3 / saarika:v2.5 (cache in front)"}
