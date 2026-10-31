@@ -51,7 +51,7 @@ export function wireSimulations(deps: AppDeps): void {
       pending = new Set();
       for (const id of ids) {
         bus.publish({ type: "merchant", merchantId: id, snapshot: store.snapshot(id) });
-        bus.publish({ type: "counters", merchantId: id, counters: store.counters(id) });
+        bus.publish({ type: "counters", merchantId: id, counters: store.weekCounters(id) });
       }
     }, 50);
   });
