@@ -134,7 +134,17 @@
   let controls = false;
   const live = {}; // merchantId -> { role, text } from the latest action
   let demoKey = "";
-  try { demoKey = localStorage.getItem("saathiDemoKey") || ""; } catch {}
+  try {
+    const params = new URLSearchParams(location.search);
+    if (params.get("key")) {
+      demoKey = params.get("key");
+      try { localStorage.setItem("saathiDemoKey", demoKey); } catch {}
+      params.delete("key");
+      history.replaceState(null, "", location.pathname + (params.toString() ? "?" + params.toString() : ""));
+    } else {
+      demoKey = localStorage.getItem("saathiDemoKey") || "";
+    }
+  } catch {}
   const shown = {};
 
   function stat(id, value, fmt) {
