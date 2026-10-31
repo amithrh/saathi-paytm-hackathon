@@ -91,7 +91,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   await app.register(fastifyStatic, { root: path.join(ROOT, "voice", "public"), prefix: "/call/", decorateReply: false });
 
   await registerBackendRoutes(app, { store: deps.store, clock: deps.clock, bus: deps.bus, ...(deps.whatsapp ? { whatsapp: deps.whatsapp } : {}), ...(deps.customerPhones ? { customerPhones: deps.customerPhones } : {}) });
-  await registerTwilioRoutes(app, { makeSession: makeSessionFactory(deps, "twilio"), ...(deps.publicBaseUrl ? { publicBaseUrl: deps.publicBaseUrl } : {}), ...(deps.log ? { log: deps.log } : {}) });
+  await registerTwilioRoutes(app, { makeSession: makeSessionFactory(deps, "phone"), ...(deps.publicBaseUrl ? { publicBaseUrl: deps.publicBaseUrl } : {}), ...(deps.log ? { log: deps.log } : {}) });
 
   const callHtml = () => readFileSync(path.join(ROOT, "voice", "public", "call.html"), "utf8");
   const dashHtml = () => readFileSync(path.join(ROOT, "dashboard", "public", "index.html"), "utf8");

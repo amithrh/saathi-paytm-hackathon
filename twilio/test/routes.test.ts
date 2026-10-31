@@ -36,7 +36,7 @@ describe("placeCall", () => {
   });
 });
 
-describe("twilio routes", () => {
+describe("twilio routes (Media Streams, behind TWILIO_MEDIA_STREAMS=1)", () => {
   const clock = fixedClock("2026-10-31T10:15:00+05:30");
   const store = MerchantStore.seeded(clock);
   const bus = new EventBus();
@@ -60,7 +60,7 @@ describe("twilio routes", () => {
     await registerTwilioRoutes(unconfigured, { makeSession, env: {} });
     await unconfigured.ready();
     await configured.register(fastifyWebsocket);
-    await registerTwilioRoutes(configured, { makeSession, env: { TWILIO_ACCOUNT_SID: "AC1", TWILIO_AUTH_TOKEN: "t", TWILIO_FROM_NUMBER: "+15550001", DEMO_PHONE_NUMBER: "+919900000000" }, publicBaseUrl: "https://demo.ngrok.app", fetchImpl: fakeFetch });
+    await registerTwilioRoutes(configured, { makeSession, env: { TWILIO_ACCOUNT_SID: "AC1", TWILIO_AUTH_TOKEN: "t", TWILIO_FROM_NUMBER: "+15550001", DEMO_PHONE_NUMBER: "+919900000000", TWILIO_MEDIA_STREAMS: "1" }, publicBaseUrl: "https://demo.ngrok.app", fetchImpl: fakeFetch });
     await configured.listen({ port: 0, host: "127.0.0.1" });
     port = (configured.server.address() as { port: number }).port;
   });

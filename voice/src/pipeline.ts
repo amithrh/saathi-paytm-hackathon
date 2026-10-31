@@ -62,6 +62,16 @@ export class CallSession {
     return this.state;
   }
 
+  /** True once the agent called end_call (the transport should play the goodbye and hang up). */
+  get agentEnded(): boolean {
+    return this.agent.hasEnded;
+  }
+
+  /** Synthesise one line outside the conversation (e.g. a phone re-prompt). Goes through the TTS cache. */
+  async speakLine(text: string): Promise<Buffer> {
+    return (await this.deps.speech.tts(text, this.language)).wav;
+  }
+
   private setState(state: CallState): void {
     this.state = state;
     this.deps.onEvent({ type: "state", state, callId: this.callId, merchantId: this.deps.merchantId, language: this.language });

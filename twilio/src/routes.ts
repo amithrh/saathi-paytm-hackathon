@@ -3,6 +3,7 @@ import type { FastifyInstance } from "fastify";
 import type { CallEvent, CallSession } from "../../voice/src/pipeline.js";
 import { attachTwilioMediaStream, connectStreamTwiml } from "./media-stream.js";
 import { placeCall, twilioCredentialsFromEnv } from "./rest.js";
+import { errorTwiml, joinForPhone, PhoneAudioStore, playThenGatherTwiml, playThenHangupTwiml, REPROMPT } from "./turns.js";
 
 export interface TwilioRouteDeps {
   makeSession: (merchantId: string, onEvent: (e: CallEvent) => void) => CallSession;
@@ -16,6 +17,8 @@ interface Prepared {
   session: CallSession;
   merchantId: string;
   setEventSink: (fn: (e: CallEvent) => void) => void;
+  /** Turn-based phone path: consecutive empty SpeechResults. */
+  empties: number;
 }
 
 /**
@@ -34,9 +37,68 @@ export async function registerTwilioRoutes(app: FastifyInstance, deps: TwilioRou
   function prepare(merchantId: string): Prepared {
     let sink: (e: CallEvent) => void = () => undefined;
     const session = deps.makeSession(merchantId, (e) => sink(e));
-    const p: Prepared = { session, merchantId, setEventSink: (fn) => (sink = fn) };
+    const p: Prepared = { session, merchantId, setEventSink: (fn) => (sink = fn), empties: 0 };
     return p;
   }
+
+  /**
+   * Media Streams needs an account tier that allows <Connect><Stream>; the trial tier drops the call.
+   * Default is the turn-based path: <Play> Sarvam audio, <Gather input="speech">, POST back, repeat.
+   */
+  const useMediaStreams = env.TWILIO_MEDIA_STREAMS === "1";
+  const audio = new PhoneAudioStore();
+  const baseUrl = (host: string | undefined) => (deps.publicBaseUrl ?? `https://${host ?? "localhost"}`).replace(/\/$/, "");
+
+  /** Run fn while capturing the audio chunks the session emits; return one phone WAV URL. */
+  async function captureTurn(p: Prepared, host: string | undefined, fn: () => Promise<void>): Promise<string[]> {
+    const chunks: Buffer[] = [];
+    p.setEventSink((e) => {
+      if (e.type === "audio") chunks.push(e.wav);
+    });
+    await fn();
+    p.setEventSink(() => undefined);
+    if (!chunks.length) return [];
+    return [`${baseUrl(host)}/twilio/audio/${audio.put(joinForPhone(chunks))}.wav`];
+  }
+
+  async function lineUrl(p: Prepared, host: string | undefined, text: string): Promise<string> {
+    return `${baseUrl(host)}/twilio/audio/${audio.put(joinForPhone([await p.session.speakLine(text)]))}.wav`;
+  }
+
+  const gatherUrl = (host: string | undefined, token: string) => `${baseUrl(host)}/twilio/gather?token=${encodeURIComponent(token)}`;
+
+  app.get<{ Params: { file: string } }>("/twilio/audio/:file", async (req, reply) => {
+    const wav = audio.get(req.params.file.replace(/\.wav$/, ""));
+    if (!wav) return reply.code(404).send({ error: "no such audio" });
+    return reply.type("audio/wav").header("Cache-Control", "no-store").send(wav);
+  });
+
+  /** One merchant turn on the phone: Twilio's speech recognition in, Sarvam agent and voice out. */
+  app.post<{ Querystring: { token?: string }; Body: Record<string, string> | undefined }>("/twilio/gather", async (req, reply) => {
+    const token = req.query.token ?? "";
+    const p = prepared.get(token);
+    reply.type("text/xml");
+    if (!p) return reply.send(errorTwiml("Sorry, this call has expired."));
+    const host = req.headers.host;
+    const said = (req.body?.SpeechResult ?? "").trim();
+    deps.log?.(`twilio: gather token=${token.slice(0, 8)} speech="${said}" confidence=${req.body?.Confidence ?? "?"}`);
+    try {
+      if (!said && p.empties === 0) {
+        p.empties++;
+        return reply.send(playThenGatherTwiml({ audioUrls: [await lineUrl(p, host, REPROMPT[p.session.language])], actionUrl: gatherUrl(host, token), language: p.session.language }));
+      }
+      p.empties = 0;
+      const urls = await captureTurn(p, host, () => p.session.handleText(said));
+      if (p.session.agentEnded) {
+        prepared.delete(token);
+        return reply.send(playThenHangupTwiml(urls));
+      }
+      return reply.send(playThenGatherTwiml({ audioUrls: urls, actionUrl: gatherUrl(host, token), language: p.session.language }));
+    } catch (e) {
+      deps.log?.(`twilio: gather failed: ${(e as Error).message}`);
+      return reply.send(errorTwiml("Sorry, Saathi hit a problem. Please try again later."));
+    }
+  });
 
   app.get("/twilio/status", async () => {
     const creds = twilioCredentialsFromEnv(env);
@@ -84,10 +146,19 @@ export async function registerTwilioRoutes(app: FastifyInstance, deps: TwilioRou
         await p.session.prepare();
       } catch (e) {
         prepared.delete(token);
-        return reply.code(500).type("text/xml").send(`<?xml version="1.0" encoding="UTF-8"?><Response><Say>Saathi could not prepare the call.</Say></Response>`);
+        return reply.code(500).type("text/xml").send(errorTwiml("Saathi could not prepare the call."));
       }
     }
-    return reply.type("text/xml").send(connectStreamTwiml(wsUrlFor(req.headers.host ?? "localhost"), { token }));
+    if (useMediaStreams) return reply.type("text/xml").send(connectStreamTwiml(wsUrlFor(req.headers.host ?? "localhost"), { token }));
+    const p = prepared.get(token)!;
+    if (p.session.currentState !== "ringing") return reply.type("text/xml").send(errorTwiml("This call was already answered."));
+    try {
+      const urls = await captureTurn(p, req.headers.host, () => p.session.answer());
+      return reply.type("text/xml").send(playThenGatherTwiml({ audioUrls: urls, actionUrl: gatherUrl(req.headers.host, token), language: p.session.language }));
+    } catch (e) {
+      deps.log?.(`twilio: answer failed: ${(e as Error).message}`);
+      return reply.type("text/xml").send(errorTwiml("Sorry, Saathi could not start the call."));
+    }
   });
 
   app.get("/twilio/media", { websocket: true }, (socket) => {
