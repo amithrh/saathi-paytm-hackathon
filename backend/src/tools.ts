@@ -51,6 +51,7 @@ const inr = (n: number) => `Rs ${n.toLocaleString("en-IN")}`;
 /** Native-script spellings for the seeded names so the agent never reads a Latin name to TTS. */
 const NAME_SCRIPT: Record<Language, Record<string, string>> = {
   "hi-IN": { Ravi: "रवि", Suresh: "सुरेश", Imran: "इमरान", Meena: "मीना", Lakshmi: "लक्ष्मी", Manjunath: "मंजुनाथ", Shobha: "शोभा", Ramesh: "रमेश", Kavitha: "कविता", Abdul: "अब्दुल", Nandini: "नंदिनी", Prasad: "प्रसाद", Divya: "दिव्या", Girish: "गिरीश", Fatima: "फ़ातिमा", Harish: "हरीश", Lalitha: "ललिता", Santosh: "संतोष", Bhavana: "भावना" },
+  "en-IN": {},
   "kn-IN": { Ravi: "ರವಿ", Suresh: "ಸುರೇಶ್", Imran: "ಇಮ್ರಾನ್", Meena: "ಮೀನಾ", Lakshmi: "ಲಕ್ಷ್ಮಿ", Manjunath: "ಮಂಜುನಾಥ್", Shobha: "ಶೋಭಾ", Ramesh: "ರಮೇಶ್", Kavitha: "ಕವಿತಾ", Abdul: "ಅಬ್ದುಲ್", Nandini: "ನಂದಿನಿ", Prasad: "ಪ್ರಸಾದ್", Divya: "ದಿವ್ಯಾ", Girish: "ಗಿರೀಶ್", Fatima: "ಫಾತಿಮಾ", Harish: "ಹರೀಶ್", Lalitha: "ಲಲಿತಾ", Santosh: "ಸಂತೋಷ್", Bhavana: "ಭಾವನಾ" },
 };
 
@@ -247,6 +248,9 @@ export const complianceCheck: ToolDef = {
 };
 
 export function reminderText(lang: Language, shop: string, owner: string, customer: string, amount: number, upiLink: string): string {
+  if (lang === "en-IN") {
+    return `Hello ${customer}, a gentle reminder from ${shop} (${owner}): ₹${amount.toLocaleString("en-IN")} is pending on your account. Please pay by UPI whenever convenient: ${upiLink} Thank you 🙏`;
+  }
   if (lang === "kn-IN") {
     return `ನಮಸ್ಕಾರ ${customer} ಅವರೇ, ${shop} (${owner}) ಕಡೆಯಿಂದ ನೆನಪಿಸುವಿಕೆ: ನಿಮ್ಮ ಬಾಕಿ ₹${amount.toLocaleString("en-IN")} ಇದೆ. ಅನುಕೂಲವಾದಾಗ ಈ ಲಿಂಕ್ ಮೂಲಕ UPI ಪಾವತಿಸಿ: ${upiLink} ಧನ್ಯವಾದಗಳು 🙏`;
   }

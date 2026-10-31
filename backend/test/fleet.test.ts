@@ -36,7 +36,7 @@ describe("fleet scene", () => {
     await runFleetScene({ store, clock, bus, monitor, sleep: async () => undefined });
     const actions = events.filter((e) => e.type === "action").map((e) => `${(e as { entry: { merchantId: string } }).entry.merchantId}:${(e as { entry: { actor: string } }).entry.actor}:${(e as { entry: { tool: string } }).entry.tool}`);
     expect(actions).toEqual([
-      "m003:Diagnoser:get_briefing", "m003:Fixer:restart_device", "m003:Compliance:compliance_note",
+      "m005:Diagnoser:get_briefing", "m005:Fixer:restart_device", "m005:Compliance:compliance_note",
       "m002:Diagnoser:get_briefing", "m002:Fixer:retry_settlement",
       "m004:Diagnoser:get_briefing", "m004:Compliance:compliance_check", "m004:Fixer:send_reminder",
       "m001:Diagnoser:get_briefing", "m001:Seller:check_loan_eligibility", "m001:Manager:escalate_to_call",
@@ -45,7 +45,7 @@ describe("fleet scene", () => {
     expect(after.scoreboard.recovered - before.recovered).toBe(980 + 8450);
     expect(after.scoreboard.ticketsAvoided - before.ticketsAvoided).toBe(2);
     const byId = Object.fromEntries(after.tiles.map((t) => [t.id, t]));
-    expect(byId.m003).toMatchObject({ status: "green", device: "online" });
+    expect(byId.m005).toMatchObject({ status: "green", device: "online" });
     expect(byId.m002).toMatchObject({ status: "green", settlement: "settled" });
     expect(byId.m004!.status).toBe("green");
     expect(store.get("m004").udhaar.some((u) => u.status === "reminded")).toBe(true);

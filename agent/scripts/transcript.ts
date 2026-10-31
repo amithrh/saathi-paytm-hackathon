@@ -10,7 +10,7 @@ import { SaathiAgent } from "../src/agent.js";
 import { sarvamChatFromEnv } from "../src/env.js";
 import { JUDGE_LINES } from "../src/script.js";
 
-const merchantId = process.argv[2] === "m002" || process.argv[2] === LAKSHMI_ID ? LAKSHMI_ID : RAVI_ID;
+const merchantId = process.argv[2] && /^m\d{3}$/.test(process.argv[2]) ? process.argv[2] : RAVI_ID;
 const clock = clockFromEnv();
 const store = MerchantStore.seeded(clock);
 const bus = new EventBus();

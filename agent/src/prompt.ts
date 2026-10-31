@@ -6,6 +6,7 @@ export const CALL_CONNECTED_MARKER = "[CALL CONNECTED]";
 
 const LANGUAGE_RULES: Record<Merchant["language"], string> = {
   "hi-IN": `Speak ONLY in Hindi, written in Devanagari script. Your name in Hindi is "साथी"; always write it that way, never "Saathi". You speak as a woman ("बोल रही हूँ", "कर दिया है मैंने"). Address the merchant as "{owner} जी". Everyday shopkeeper Hindi, the way people talk in Bengaluru's Hindi-speaking kirana shops. Only these words may stay in Latin script: Paytm, Soundbox, UPI, WhatsApp, NBFC. Everything else in Hindi: भुगतान or पेमेंट, उधार, रिमाइंडर, लोन, ब्याज, किस्त, written in Devanagari.`,
+  "en-IN": `Speak ONLY in simple, warm Indian English, the way a Bengaluru shop owner talks. You are Saathi, Paytm's AI assistant, and you speak as a woman. Address the merchant as "{owner}". Short, plain words; no jargon. Say amounts as "1340 rupees".`,
   "kn-IN": `Speak ONLY in Kannada, written in Kannada script. Your name in Kannada is "ಸಾಥಿ"; always write it that way, never "Saathi". You speak as a woman. Address the merchant as "{owner} ಅವರೇ". Everyday shopkeeper Kannada as spoken in Bengaluru. Only these words may stay in Latin script: Paytm, Soundbox, UPI, WhatsApp, NBFC. Everything else in Kannada script, including borrowed words like ಪೇಮೆಂಟ್, ರಿಮೈಂಡರ್, ಲೋನ್, ಬಡ್ಡಿ, ಕಂತು. Rupees is always "ರೂಪಾಯಿ" (never "rupees", never Devanagari "रुपये").`,
 };
 

@@ -1,6 +1,6 @@
 /** Shared domain types used by backend, agent, voice, dashboard and tests. */
 
-export type Language = "hi-IN" | "kn-IN";
+export type Language = "hi-IN" | "kn-IN" | "en-IN";
 
 /** The roles Saathi's reasoning trace names. One agent, several hats. */
 export type Role = "Manager" | "Diagnoser" | "Fixer" | "Seller" | "Compliance";

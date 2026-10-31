@@ -46,6 +46,7 @@ export function customerPhonesFromEnv(env: NodeJS.ProcessEnv = process.env): Rec
   const out: Record<string, string> = {};
   if (env.SURESH_PHONE_NUMBER?.trim()) out["c-suresh"] = env.SURESH_PHONE_NUMBER.trim();
   if (env.MANJUNATH_PHONE_NUMBER?.trim()) out["c-manjunath"] = env.MANJUNATH_PHONE_NUMBER.trim();
+  if (env.ARJUN_PHONE_NUMBER?.trim()) out["c-arjun"] = env.ARJUN_PHONE_NUMBER.trim();
   return out;
 }
 

@@ -4,6 +4,7 @@ import { Rng } from "./rng.js";
 
 export const RAVI_ID = "m001";
 export const LAKSHMI_ID = "m002";
+export const THOMAS_ID = "m003";
 export const SEED = 20261031;
 
 const AREAS = [
@@ -253,6 +254,28 @@ function buildOther(rng: Rng, idx: number, today: string): Merchant {
   };
 }
 
+function makeThomas(m: Merchant, today: string): void {
+  m.ownerName = "Thomas Mathew";
+  m.shopName = "Thomas Bean & Bake Cafe";
+  m.category = "Cafe";
+  m.area = "Koramangala 5th Block";
+  m.language = "en-IN";
+  m.phone = "+91 98455 30303";
+  m.mid = "PTM-KOR-00303";
+  m.consent = fullConsent("2026-03-09");
+  m.dndRegistered = false;
+  pinDayTotal(m.transactions, addDays(today, -1), 9800);
+  m.devices = [soundbox("SB-03C1", "online", istInstant(today, 8, 4).toISOString(), []), qr("QR-0303", istInstant(today, 8, 0).toISOString())];
+  m.udhaar = [
+    { customerId: "c-arjun", customerName: "Arjun", customerPhone: "+91 98450 77011", customerDnd: false, amount: 1600, since: addDays(today, -11), items: "coffee and snacks for the office", status: "outstanding" },
+    { customerId: "c-neha", customerName: "Neha", customerPhone: "+91 98450 77012", customerDnd: false, amount: 450, since: addDays(today, -4), items: "cakes", status: "outstanding" },
+  ];
+  m.seasonalLastYear = genSeasonal(new Rng(30303), 210000, 0.38, Number(today.slice(0, 4)) - 1);
+  m.loanProfile = { creditScore: 728, existingLoan: false, monthsOnPaytm: 22 };
+  m.creditHistory = { settlementDays90: 90, settlementsOnTime90: 83, uptimePct30: 93, udhaarRecoveredPct: 64, priorLoans: 0, priorLoansOnTime: 0 };
+  m.weekSoFar = { recovered: 640, collected: 900, offered: 0, ticketsAvoided: 1 };
+}
+
 /** Own RNG per merchant so adding this history does not shift any other seeded value. */
 function creditHistoryFor(idx: number): CreditHistory {
   const r = new Rng(SEED * 31 + idx * 7919);
@@ -277,6 +300,9 @@ export function buildMerchants(today: string, seed = SEED): Merchant[] {
   const rng = new Rng(seed);
   const out: Merchant[] = [buildRavi(rng, today), buildLakshmi(rng, today)];
   for (let i = 3; i <= 20; i++) out.push(buildOther(rng, i, today));
+  // m003 becomes the English-speaking demo merchant. Built from the same RNG draws, then overridden,
+  // so no other merchant's seeded data moves.
+  makeThomas(out.find((m) => m.id === THOMAS_ID)!, today);
   // Fleet neighbours open calm: devices heartbeating, settlements credited. The fleet scene injects incidents live.
   for (const m of out) {
     if (!(FLEET_IDS as readonly string[]).includes(m.id) || m.id === "m001" || m.id === "m002") continue;

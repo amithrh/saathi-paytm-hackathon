@@ -62,6 +62,7 @@ export interface GatherTwimlInput {
 /** Vocabulary the demo turns expect: yes/no, the actions, the customer names. */
 export const SPEECH_HINTS: Record<Language, readonly string[]> = {
   "hi-IN": ["हाँ", "हां", "नहीं", "भेजो", "भेज दो", "रिमाइंडर", "लोन", "चाहिए", "आगे बढ़ो", "ठीक है", "धन्यवाद", "सुरेश", "Suresh", "reminder", "loan"],
+  "en-IN": ["yes", "no", "send", "reminder", "loan", "go ahead", "okay", "thank you", "Arjun", "Neha"],
   "kn-IN": ["ಹೌದು", "ಇಲ್ಲ", "ಬೇಡ", "ಕಳಿಸಿ", "ರಿಮೈಂಡರ್", "ಲೋನ್", "ಬೇಕು", "ಮುಂದುವರಿಸಿ", "ಸರಿ", "ಧನ್ಯವಾದಗಳು", "ಮಂಜುನಾಥ್", "Manjunath", "reminder", "loan"],
 };
 
@@ -81,7 +82,7 @@ export function playThenGatherTwiml(i: GatherTwimlInput): string {
 }
 
 export const LOW_CONFIDENCE = 0.5;
-const AFFIRMATIVE = /^(हाँ|हां|हा|हाँ जी|हां जी|जी|जी हाँ|यस|yes|haan|han|ha|ok|okay|ओके|ठीक है|ಹೌದು|ಹೂಂ|ಹೂ|ಸರಿ)$/i;
+const AFFIRMATIVE = /^(yes please|yeah|yep|sure|हाँ|हां|हा|हाँ जी|हां जी|जी|जी हाँ|यस|yes|haan|han|ha|ok|okay|ओके|ठीक है|ಹೌದು|ಹೂಂ|ಹೂ|ಸರಿ)$/i;
 const NEGATIVE = /^(नहीं|नही|ना|मत|no|nahi|nahin|ಇಲ್ಲ|ಬೇಡ)$/i;
 
 export interface MerchantUtterance {
@@ -129,4 +130,5 @@ export function errorTwiml(message: string): string {
 export const REPROMPT: Record<Language, string> = {
   "hi-IN": "हाँ, बोलिए।",
   "kn-IN": "ಹೌದು, ಹೇಳಿ.",
+  "en-IN": "Yes, please go ahead.",
 };

@@ -7,6 +7,7 @@ import { bringDownRunning, bringSoundboxDown } from "../backend/src/bringdown.js
 export const SCENE_CUSTOMER: Record<string, { customerId: string; name: string; envKey: string }> = {
   m001: { customerId: "c-suresh", name: "Suresh", envKey: "SURESH_PHONE_NUMBER" },
   m002: { customerId: "c-manjunath", name: "Manjunath", envKey: "MANJUNATH_PHONE_NUMBER" },
+  m003: { customerId: "c-arjun", name: "Arjun", envKey: "ARJUN_PHONE_NUMBER" },
 };
 
 export const SANDBOX_JOIN_HINT = 'The phone must first send "join plenty-drive" to +1 415 523 8886 on WhatsApp (valid 72 h).';

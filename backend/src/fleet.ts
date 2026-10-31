@@ -107,7 +107,7 @@ export class FleetMonitor {
       shopName: m.shopName,
       ownerName: m.ownerName,
       area: m.area,
-      language: m.language === "kn-IN" ? "ಕನ್ನಡ" : "हिंदी",
+      language: m.language === "kn-IN" ? "ಕನ್ನಡ" : m.language === "en-IN" ? "English" : "हिंदी",
       device: silent ? "silent" : "online",
       deviceNote: silent ? `silent since ${istTime(new Date(silent.lastHeartbeat))}` : sb ? `heartbeat ${istTime(new Date(sb.lastHeartbeat))}` : "no device",
       settlement: stuck ? "stuck" : "settled",
@@ -149,7 +149,7 @@ export const FLEET_SCENE_TIMINGS = {
 } as const;
 
 export const FLEET_SCENE = {
-  silentDevice: "m003",
+  silentDevice: "m005",
   stuckSettlement: "m002",
   ageingUdhaar: "m004",
   escalation: "m001",

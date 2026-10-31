@@ -8,7 +8,8 @@ import { CALL_CONNECTED_MARKER, PRE_CALL_MARKER } from "./prompt.js";
  * (taken from a live Sarvam run) so its audio can be cached ahead of time.
  */
 export interface SceneScript {
-  fixTool: { name: string; args: Record<string, unknown> };
+  /** The safe fix run before the call, if the scene has a leak. */
+  fixTool?: { name: string; args: Record<string, unknown> };
   reminderCustomerId: string;
   loanAmount: number;
   opening: string;
@@ -59,6 +60,22 @@ export const SCENES: Record<string, SceneScript> = {
     bye: /ಧನ್ಯವಾದ|ಸರಿ|bye|ಸಾಕು/i,
     no: /ಬೇಡ|ಇಲ್ಲ|no\b/i,
   },
+  m003: {
+    reminderCustomerId: "c-arjun",
+    loanAmount: 60000,
+    opening:
+      "Hello Thomas, this is Saathi, Paytm's AI assistant. Yesterday the cafe took 9800 rupees across 24 payments. All your devices and settlements are fine this morning. Arjun owes you 1600 rupees, and it has been 11 days. Shall I send Arjun a polite WhatsApp reminder with a UPI payment link?",
+    afterReminder:
+      "Done, Arjun has the reminder on WhatsApp. Thomas, you can get up to 60000 rupees of working capital. Last year your sales rose 30% around Diwali, and Diwali is 8 days away, so this is a good time to stock up. It is for 6 months at 18% a year, about 10900 rupees a month, from Paytm's partner NBFC, and you can cancel within 1 day at no cost. Would you like it?",
+    afterLoan: "Thank you, Thomas. I have put in the request for 60000 rupees. A Paytm team member will approve it and the details will come on WhatsApp. Anything else I can help with?",
+    goodbye: "Thank you, Thomas. Have a good day.",
+    declined: "No problem, Thomas. Just tell me when you need it. Anything else I can help with?",
+    unclear: "Sorry Thomas, I did not catch that. Could you say it again?",
+    yesReminder: /reminder|send|^(yes|yeah|sure)/i,
+    yesLoan: /loan|go ahead|^(yes|yeah|sure)/i,
+    bye: /thank|okay|bye|that's all|done/i,
+    no: /^no\b|not now|don't/i,
+  },
 };
 
 /** Every Saathi line the scripted scene can speak, for TTS pre-caching. */
@@ -104,7 +121,7 @@ export class ScriptedBrain implements ChatClient {
 
     if (text === PRE_CALL_MARKER) {
       if (last.role === "user") return this.call("get_briefing", {});
-      if (lastTool === "get_briefing") return this.call(s.fixTool.name, s.fixTool.args);
+      if (lastTool === "get_briefing" && s.fixTool) return this.call(s.fixTool.name, s.fixTool.args);
       return this.say("READY");
     }
     if (text === CALL_CONNECTED_MARKER) {

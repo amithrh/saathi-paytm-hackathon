@@ -70,6 +70,7 @@
     <div class="selector" id="selector">
       <button data-m="m001">Ravi · Hindi</button>
       <button data-m="m002">Lakshmi · Kannada</button>
+      <button data-m="m003">Thomas · English</button>
     </div>
     <div class="controls">
       <button class="big answer" id="startBtn">Ring the merchant</button>
@@ -104,7 +105,7 @@
   const params = new URLSearchParams(location.search);
   let merchantId = params.get("merchant") || "m001";
   let ws, outCtx, inCtx, micStream, processor, source, playhead = 0, speakingUntil = 0, ringTimer, callStart, timerInt, micOn = false, chunks = [], inRate = 16000;
-  const MERCHANTS = { m001: { who: "Ravi Kumar", sub: "Ravi Kirana Store · Jayanagar · हिंदी" }, m002: { who: "Lakshmi Devi", sub: "Lakshmi Provision Stores · Basavanagudi · ಕನ್ನಡ" } };
+  const MERCHANTS = { m001: { who: "Ravi Kumar", sub: "Ravi Kirana Store · Jayanagar · हिंदी" }, m002: { who: "Lakshmi Devi", sub: "Lakshmi Provision Stores · Basavanagudi · ಕನ್ನಡ" }, m003: { who: "Thomas Mathew", sub: "Thomas Bean & Bake Cafe · Koramangala · English" } };
 
   function selectMerchant(id) {
     merchantId = id;

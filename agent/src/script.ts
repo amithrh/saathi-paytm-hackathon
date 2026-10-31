@@ -7,6 +7,11 @@ export const JUDGE_LINES: Record<Language, string[]> = {
     "हाँ, लोन चाहिए, आगे बढ़ो।",
     "ठीक है, धन्यवाद।",
   ],
+  "en-IN": [
+    "Yes, please send Arjun a reminder.",
+    "Yes, I want the loan, go ahead.",
+    "Okay, thank you.",
+  ],
   "kn-IN": [
     "ಹೌದು, ಮಂಜುನಾಥ್‌ಗೆ ರಿಮೈಂಡರ್ ಕಳಿಸಿ.",
     "ಹೌದು, ಲೋನ್ ಬೇಕು, ಮುಂದುವರಿಸಿ.",

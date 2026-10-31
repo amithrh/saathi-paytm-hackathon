@@ -21,7 +21,7 @@ const saathi = new CachedSpeechClient(new SarvamSpeechClient({ apiKey: key }), {
 const judge = new CachedSpeechClient(new SarvamSpeechClient({ apiKey: key, speaker: "amit" }), { speaker: "amit" });
 
 const jobs: Array<{ client: CachedSpeechClient; text: string; lang: Language }> = [];
-for (const [merchantId, lang] of [["m001", "hi-IN"], ["m002", "kn-IN"]] as Array<[string, Language]>) {
+for (const [merchantId, lang] of [["m001", "hi-IN"], ["m002", "kn-IN"], ["m003", "en-IN"]] as Array<[string, Language]>) {
   // The pipeline splits speech by sentence before TTS, so cache the chunks exactly as it will request them.
   for (const line of sceneLines(merchantId)) for (const chunk of splitSentences(line)) jobs.push({ client: saathi, text: chunk, lang });
   for (const line of JUDGE_LINES[lang]) jobs.push({ client: judge, text: line, lang });

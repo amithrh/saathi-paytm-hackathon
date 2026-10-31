@@ -157,7 +157,7 @@
 </header>
 <div id="controls">
   <button class="go" id="ctlStart" hidden>▶ Start demo</button>
-  <div class="grp seg"><span class="lab">Merchant</span><a href="#" data-m="m001">Ravi · हिंदी</a><a href="#" data-m="m002">Lakshmi · ಕನ್ನಡ</a></div>
+  <div class="grp seg"><span class="lab">Merchant</span><a href="#" data-m="m001">Ravi · हिंदी</a><a href="#" data-m="m002">Lakshmi · ಕನ್ನಡ</a><a href="#" data-m="m003">Thomas · English</a></div>
   <div class="grp" id="ctlCall" hidden><span class="lab">Merchant phone</span><input id="ctlPhone" inputmode="tel" autocomplete="off"><button class="green" id="ctlRing">Ring the merchant's phone</button><span class="cst" id="ctlCallSt"></span></div>
   <div class="grp" id="ctlWa" hidden><span class="lab" id="ctlWaLab">Customer's WhatsApp</span><input id="ctlCust" inputmode="tel" autocomplete="off"><button class="ghost" id="ctlWaTest">Send test WhatsApp</button><span class="hint" id="ctlHint"></span><span class="cst" id="ctlWaSt"></span></div>
   <span class="cst" id="ctlLocked" hidden>Demo controls are local-only. Open on the laptop, or add ?key=… to the URL.</span>
@@ -266,7 +266,7 @@
     const m = s.merchant;
     $("shopName").textContent = m.shopName;
     $("scoreShop").textContent = m.shopName;
-    $("shopMeta").textContent = `${m.ownerName} · ${m.area}, ${m.city} · ${m.language === "kn-IN" ? "ಕನ್ನಡ" : "हिंदी"} · ${m.phone}`;
+    $("shopMeta").textContent = `${m.ownerName} · ${m.area}, ${m.city} · ${m.language === "kn-IN" ? "ಕನ್ನಡ" : m.language === "en-IN" ? "English" : "हिंदी"} · ${m.phone}`;
     $("clock").textContent = s.clockIst;
     document.title = `Saathi · ${m.shopName}`;
     const t = s.takings;
