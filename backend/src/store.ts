@@ -32,6 +32,8 @@ export class MerchantStore {
   private approvals = new Map<string, ApprovalRequest>();
   private listeners = new Set<(merchantId: string) => void>();
   private seq = 0;
+  /** Bumped on every reset, so delayed simulations from an earlier run can tell they are stale. */
+  generation = 0;
 
   constructor(readonly clock: Clock, merchants: Merchant[]) {
     for (const m of merchants) this.merchants.set(m.id, m);
@@ -39,6 +41,19 @@ export class MerchantStore {
 
   static seeded(clock: Clock): MerchantStore {
     return new MerchantStore(clock, buildMerchants(istDate(clock.now())));
+  }
+
+  /**
+   * Back to the opening scene without a restart: reseed every merchant for the current (pinned) clock,
+   * drop compliance tickets and approvals. Listeners and the clock are kept.
+   */
+  reset(): void {
+    this.merchants.clear();
+    for (const m of buildMerchants(istDate(this.clock.now()))) this.merchants.set(m.id, m);
+    this.tickets.clear();
+    this.approvals.clear();
+    this.generation++;
+    for (const id of this.merchants.keys()) this.changed(id);
   }
 
   onChange(listener: (merchantId: string) => void): () => void {

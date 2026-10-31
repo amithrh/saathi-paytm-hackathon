@@ -11,6 +11,7 @@ import { registerBackendRoutes } from "../backend/src/http.js";
 import { MerchantStore } from "../backend/src/store.js";
 import type { ServerEvent } from "../shared/types.js";
 import { registerTwilioRoutes } from "../twilio/src/routes.js";
+import { isTrustedControl, registerDemoRoutes } from "./demo.js";
 import { attachBrowserTransport } from "../voice/src/browser-transport.js";
 import { CallSession, type CallEvent } from "../voice/src/pipeline.js";
 import type { SpeechClient } from "../voice/src/speech.js";
@@ -63,7 +64,9 @@ export function wireSimulations(deps: AppDeps): void {
       const merchant = store.get(e.merchantId);
       const u = merchant.udhaar.find((x) => x.customerName === e.toName);
       if (!u) return;
+      const generation = store.generation;
       setTimeout(() => {
+        if (store.generation !== generation) return; // the scene was reset meanwhile
         if (u.status === "paid") return;
         store.markUdhaarPaid(e.merchantId, u.customerId);
         bus.publish({
@@ -76,6 +79,8 @@ export function wireSimulations(deps: AppDeps): void {
 }
 
 export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
+  // One shared object, so numbers changed from the dashboard reach every new call's tool context.
+  deps.customerPhones ??= {};
   const app = Fastify({ logger: false });
   // Twilio delivers its voice and status webhooks as form POSTs. Without this parser
   // Fastify answers 415 before the route runs and the caller hears "check your URL".
@@ -91,7 +96,8 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   await app.register(fastifyStatic, { root: path.join(ROOT, "voice", "public"), prefix: "/call/", decorateReply: false });
 
   await registerBackendRoutes(app, { store: deps.store, clock: deps.clock, bus: deps.bus, ...(deps.whatsapp ? { whatsapp: deps.whatsapp } : {}), ...(deps.customerPhones ? { customerPhones: deps.customerPhones } : {}) });
-  await registerTwilioRoutes(app, { makeSession: makeSessionFactory(deps, "phone"), ...(deps.publicBaseUrl ? { publicBaseUrl: deps.publicBaseUrl } : {}), ...(deps.log ? { log: deps.log } : {}) });
+  await registerDemoRoutes(app, deps);
+  await registerTwilioRoutes(app, { authorize: (req) => isTrustedControl(req, process.env), makeSession: makeSessionFactory(deps, "phone"), ...(deps.publicBaseUrl ? { publicBaseUrl: deps.publicBaseUrl } : {}), ...(deps.log ? { log: deps.log } : {}) });
 
   const callHtml = () => readFileSync(path.join(ROOT, "voice", "public", "call.html"), "utf8");
   const dashHtml = () => readFileSync(path.join(ROOT, "dashboard", "public", "index.html"), "utf8");

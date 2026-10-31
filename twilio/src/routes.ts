@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyRequest } from "fastify";
 import type { CallEvent, CallSession } from "../../voice/src/pipeline.js";
 import { attachTwilioMediaStream, connectStreamTwiml } from "./media-stream.js";
 import { placeCall, twilioCredentialsFromEnv } from "./rest.js";
@@ -7,6 +7,8 @@ import { pcm16ToWav } from "../../voice/src/audio.js";
 import { errorTwiml, joinForPhone, PhoneAudioStore, playThenGatherTwiml as gatherTwiml, playThenHangupTwiml, prepareMerchantText, REPROMPT, SPEECH_HINTS, speechModelFromEnv, type GatherTwimlInput } from "./turns.js";
 
 export interface TwilioRouteDeps {
+  /** Gate for /twilio/call, which spends money and rings real phones. Default: allow (tests, local use). */
+  authorize?: (req: FastifyRequest) => boolean;
   makeSession: (merchantId: string, onEvent: (e: CallEvent) => void) => CallSession;
   publicBaseUrl?: string;
   log?: (line: string) => void;
@@ -164,11 +166,13 @@ export async function registerTwilioRoutes(app: FastifyInstance, deps: TwilioRou
 
   /** Place the outbound call. Body: { merchantId?, to? }. Needs creds and PUBLIC_BASE_URL (ngrok). */
   app.post<{ Body: { merchantId?: string; to?: string } }>("/twilio/call", async (req, reply) => {
+    if (deps.authorize && !deps.authorize(req)) return reply.code(403).send({ error: "demo controls are local-only; open the dashboard on the laptop or add ?key=<DEMO_CONTROL_KEY>" });
     const creds = twilioCredentialsFromEnv(env);
     if (!creds) return reply.code(503).send({ error: "Twilio credentials missing in .env (TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_FROM_NUMBER)" });
     if (!deps.publicBaseUrl) return reply.code(503).send({ error: "PUBLIC_BASE_URL is not set; Twilio must reach this server over HTTPS (ngrok http 3000)" });
-    const to = req.body?.to ?? env.DEMO_PHONE_NUMBER;
+    const to = (req.body?.to ?? env.DEMO_PHONE_NUMBER ?? "").replace(/[\s()-]/g, "");
     if (!to) return reply.code(400).send({ error: "no phone number: pass `to` or set DEMO_PHONE_NUMBER" });
+    if (!/^\+\d{8,15}$/.test(to)) return reply.code(400).send({ error: `not an international number: ${to} (use +91...)` });
     const merchantId = req.body?.merchantId ?? "m001";
     const token = randomUUID();
     const p = prepare(merchantId);

@@ -73,7 +73,7 @@ describe("turn-based phone call over /twilio/voice and /twilio/gather", () => {
   const app = Fastify();
   app.addContentTypeParser("application/x-www-form-urlencoded", { parseAs: "string" }, (_r, body, done) => done(null, Object.fromEntries(new URLSearchParams(String(body)))));
   beforeAll(async () => {
-    await registerTwilioRoutes(app, { makeSession, env: { TWILIO_ACCOUNT_SID: "AC1", TWILIO_AUTH_TOKEN: "t", TWILIO_FROM_NUMBER: "+1555", DEMO_PHONE_NUMBER: "+9199" }, publicBaseUrl: "https://saathi.example.app", fetchImpl: fakeFetch });
+    await registerTwilioRoutes(app, { makeSession, env: { TWILIO_ACCOUNT_SID: "AC1", TWILIO_AUTH_TOKEN: "t", TWILIO_FROM_NUMBER: "+1555", DEMO_PHONE_NUMBER: "+919900000000" }, publicBaseUrl: "https://saathi.example.app", fetchImpl: fakeFetch });
     await app.ready();
   });
   afterAll(() => app.close());
@@ -214,7 +214,7 @@ describe("phone speech hardening", () => {
     app.addContentTypeParser("application/x-www-form-urlencoded", { parseAs: "string" }, (_r, body, done) => done(null, Object.fromEntries(new URLSearchParams(String(body)))));
     await registerTwilioRoutes(app, {
       makeSession: (id, onEvent) => new CallSession({ merchantId: id, store, clock, llm: spy, speech: new FakeSpeechClient(), bus, transport: "phone", onEvent }),
-      env: { TWILIO_ACCOUNT_SID: "A", TWILIO_AUTH_TOKEN: "t", TWILIO_FROM_NUMBER: "+1", DEMO_PHONE_NUMBER: "+9", TWILIO_SPEECH_MODEL: "off" },
+      env: { TWILIO_ACCOUNT_SID: "A", TWILIO_AUTH_TOKEN: "t", TWILIO_FROM_NUMBER: "+1", DEMO_PHONE_NUMBER: "+919900000000", TWILIO_SPEECH_MODEL: "off" },
       publicBaseUrl: "https://s.app",
       fetchImpl: (async () => new Response(JSON.stringify({ sid: "CA", status: "queued" }), { status: 201 })) as typeof fetch,
     });

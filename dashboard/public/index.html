@@ -116,6 +116,20 @@
   #policy li { margin:0 0 8px; font-size:16px; line-height:1.35; }
   #policy li b { color:var(--ink); }
   #policy li span { color:var(--muted); font-size:14px; display:block; }
+  #controls { background:#0b2352; color:#e2e8f0; padding:8px 36px; display:flex; flex-wrap:wrap; align-items:center; gap:10px 18px; font-size:14px; }
+  #controls .grp { display:flex; align-items:center; gap:8px; }
+  #controls .lab { font-size:12px; letter-spacing:.12em; text-transform:uppercase; color:#93c5fd; font-weight:800; }
+  #controls input { width:150px; padding:8px 10px; border-radius:10px; border:1px solid #334e8a; background:#102a5c; color:#fff; font:inherit; font-size:15px; font-variant-numeric:tabular-nums; }
+  #controls button, #controls a.btn { border:0; border-radius:10px; padding:9px 14px; font:inherit; font-size:14px; font-weight:800; cursor:pointer; color:#fff; background:#2563eb; text-decoration:none; white-space:nowrap; }
+  #controls button.green { background:#16a34a; } #controls button.ghost, #controls a.btn.ghost { background:#1e3a70; }
+  #controls button.danger { background:#7f1d1d; } #controls button.danger.armed { background:#dc2626; animation:blink .6s infinite; }
+  #controls button:disabled { opacity:.5; cursor:not-allowed; }
+  #controls .seg a { padding:7px 12px; border-radius:999px; color:#cbd5e1; text-decoration:none; font-weight:700; }
+  #controls .seg a.on { background:#06b6d4; color:#06203a; }
+  #controls .cst { font-size:13px; color:#cbd5e1; max-width:340px; }
+  #controls .cst.err { color:#fca5a5; } #controls .cst.ok { color:#86efac; }
+  #controls .hint { font-size:12px; color:#94a3b8; max-width:260px; line-height:1.25; }
+  #controls .spacer { flex:1; }
 </style>
 </head>
 <body>
@@ -128,6 +142,15 @@
   <div class="pill" id="callPill" data-state="idle"><span class="dot"></span><span id="callText">No call</span></div>
   <div class="pill" id="clock">–</div>
 </header>
+<div id="controls">
+  <div class="grp seg"><span class="lab">Merchant</span><a href="#" data-m="m001">Ravi · हिंदी</a><a href="#" data-m="m002">Lakshmi · ಕನ್ನಡ</a></div>
+  <div class="grp" id="ctlCall" hidden><span class="lab">Merchant phone</span><input id="ctlPhone" inputmode="tel" autocomplete="off"><button class="green" id="ctlRing">Ring the merchant's phone</button><span class="cst" id="ctlCallSt"></span></div>
+  <div class="grp" id="ctlWa" hidden><span class="lab" id="ctlWaLab">Customer's WhatsApp</span><input id="ctlCust" inputmode="tel" autocomplete="off"><button class="ghost" id="ctlWaTest">Send test WhatsApp</button><span class="hint" id="ctlHint"></span><span class="cst" id="ctlWaSt"></span></div>
+  <span class="cst" id="ctlLocked" hidden>Demo controls are local-only. Open on the laptop, or add ?key=… to the URL.</span>
+  <span class="spacer"></span>
+  <a class="btn ghost" id="ctlCallScreen" target="_blank" rel="noopener">Open laptop call screen</a>
+  <button class="danger" id="ctlReset" hidden>Reset scene</button>
+</div>
 <main>
   <section class="score">
     <div class="top"><h2>This week · rupees Saathi moved for <span id="scoreShop" style="color:var(--ink);text-transform:none;letter-spacing:0">this shop</span></h2><span id="scoreNote">Monday to now · live</span></div>
@@ -332,6 +355,115 @@
     p.hidden = false;
   });
 
+
+  // ---- demo controls ------------------------------------------------------------------------
+  let demoKey = "";
+  try {
+    if (params.get("key")) { localStorage.setItem("saathiDemoKey", params.get("key")); params.delete("key"); history.replaceState(null, "", "?" + params.toString()); }
+    demoKey = localStorage.getItem("saathiDemoKey") || "";
+  } catch {}
+  const ctlFetch = (url, body) => fetch(url, { method: body === undefined ? "GET" : "POST", headers: { "Content-Type": "application/json", ...(demoKey ? { "X-Demo-Key": demoKey } : {}) }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) })
+    .then(async (r) => { const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`); return j; });
+  const mask = (n) => (n && n.length > 7 ? n.slice(0, 5) + "•".repeat(n.length - 8) + n.slice(-3) : n || "");
+  const clean = (v) => v.replace(/[\s()-]/g, "");
+  /** Show the masked number; reveal the real one while editing. */
+  function maskedInput(el, onCommit) {
+    el.dataset.value = el.dataset.value || "";
+    el.value = mask(el.dataset.value);
+    el.addEventListener("focus", () => { el.value = el.dataset.value; el.select(); });
+    el.addEventListener("blur", () => {
+      const v = clean(el.value);
+      const changed = v !== el.dataset.value;
+      el.dataset.value = v; el.value = mask(v);
+      if (changed && onCommit) onCommit(v);
+    });
+    el.addEventListener("keydown", (e) => { if (e.key === "Enter") el.blur(); });
+  }
+  function status(id, text, kind) { const el = $(id); el.textContent = text; el.className = "cst" + (kind ? " " + kind : ""); }
+
+  for (const a of document.querySelectorAll("#controls .seg a")) {
+    a.classList.toggle("on", a.dataset.m === merchantId);
+    a.addEventListener("click", (e) => { e.preventDefault(); const q = new URLSearchParams(location.search); q.set("merchant", a.dataset.m); location.search = q.toString(); });
+  }
+  $("ctlCallScreen").href = `/call?merchant=${encodeURIComponent(merchantId)}`;
+
+  ctlFetch(`/api/demo/config?merchant=${encodeURIComponent(merchantId)}`).then((c) => {
+    if (!c.controls) { $("ctlLocked").hidden = false; return; }
+    $("ctlCall").hidden = false; $("ctlReset").hidden = false;
+    $("ctlPhone").dataset.value = c.demoPhone; maskedInput($("ctlPhone"));
+    if (!c.twilioConfigured) { $("ctlRing").disabled = true; status("ctlCallSt", "Twilio not configured in .env", "err"); }
+    if (c.customer) {
+      $("ctlWa").hidden = false;
+      $("ctlWaLab").textContent = `${c.customer.name}'s WhatsApp`;
+      $("ctlHint").textContent = c.joinHint;
+      $("ctlCust").dataset.value = c.customer.phone; maskedInput($("ctlCust"), (v) => {
+        ctlFetch("/api/demo/customer-phone", { merchantId, phone: v })
+          .then((r) => status("ctlWaSt", r.phone ? `Reminder will go to ${mask(r.phone)}` : "No number: reminder stays on the dashboard", "ok"))
+          .catch((e) => status("ctlWaSt", e.message, "err"));
+      });
+      if (!c.whatsappLive) { $("ctlWaTest").disabled = true; status("ctlWaSt", "WhatsApp mock (no sender in .env)"); }
+    }
+  }).catch(() => { $("ctlLocked").hidden = false; });
+
+  let dialling = false;
+  $("ctlRing").addEventListener("click", async () => {
+    const to = $("ctlPhone").dataset.value;
+    if (dialling) return;
+    dialling = true; $("ctlRing").disabled = true;
+    status("ctlCallSt", "Dialling… Saathi is reading the shop's data");
+    try {
+      const r = await ctlFetch("/twilio/call", { merchantId, to });
+      status("ctlCallSt", `Ringing ${mask(to)} (${r.status})`, "ok");
+    } catch (e) {
+      status("ctlCallSt", e.message, "err");
+      dialling = false; $("ctlRing").disabled = false;
+    }
+  });
+  /** Mirror call-state events into the strip; re-enable Ring when the call ends. */
+  function controlsCallState(state, transport) {
+    if (transport !== "phone") return;
+    if (state === "live") status("ctlCallSt", "On call", "ok");
+    if (state === "ended") { status("ctlCallSt", "Call ended"); dialling = false; $("ctlRing").disabled = false; }
+  }
+
+  $("ctlWaTest").addEventListener("click", async () => {
+    const to = $("ctlCust").dataset.value;
+    $("ctlWaTest").disabled = true; status("ctlWaSt", "Sending…");
+    try { const r = await ctlFetch("/api/demo/whatsapp-test", { to }); status("ctlWaSt", `Test sent, ${r.sid} (${r.status}). Check the phone.`, "ok"); }
+    catch (e) { status("ctlWaSt", e.message, "err"); }
+    finally { $("ctlWaTest").disabled = false; }
+  });
+
+  let resetArmed = null;
+  $("ctlReset").addEventListener("click", async () => {
+    const b = $("ctlReset");
+    if (!resetArmed) {
+      b.classList.add("armed"); b.textContent = "Tap again to reset";
+      resetArmed = setTimeout(() => { resetArmed = null; b.classList.remove("armed"); b.textContent = "Reset scene"; }, 3000);
+      return;
+    }
+    clearTimeout(resetArmed); resetArmed = null;
+    b.classList.remove("armed"); b.textContent = "Resetting…"; b.disabled = true;
+    try { await ctlFetch("/api/demo/reset", {}); b.textContent = "Reset scene"; }
+    catch (e) { b.textContent = "Reset failed: " + e.message; }
+    finally { b.disabled = false; setTimeout(() => (b.textContent = "Reset scene"), 2500); }
+  });
+
+  /** Server reseeded the store: clear every live panel; the fresh snapshot follows. */
+  function onReset() {
+    $("log").innerHTML = '<div class="empty">Waiting for Saathi to start the call…</div>'; logCount = 0;
+    $("chat").innerHTML = '<div class="empty">Nothing yet.</div>'; chatCount = 0;
+    $("lat").innerHTML = "";
+    $("gates").innerHTML = '<div class="empty">No gated action yet.</div>'; $("gatesFor").textContent = "fill in live from compliance_check";
+    $("approvals").innerHTML = ""; $("escalated").hidden = true;
+    $("wa").innerHTML = '<div class="empty">No message sent yet.</div>'; $("waStatus").textContent = "mock channel"; $("waStatus").style.color = "";
+    const d = $("disburse"); d.disabled = true; d.textContent = "Disburse · agent cannot press this"; delete d.dataset.offer;
+    $("disburseNote").textContent = "Enabled only by a human approval. Even then it only hands the file to the lending partner (sandbox).";
+    setCall("idle", "");
+    status("ctlCallSt", ""); dialling = false; if ($("ctlRing")) $("ctlRing").disabled = false;
+    fetch(`/api/merchants/${merchantId}/snapshot`).then((r) => r.json()).then(renderSnapshot);
+  }
+
   // Two feeds, one handler. The stream is primary; if a proxy buffers or drops it, the
   // dashboard polls the same events by sequence number so the projector never goes blank.
   let lastSeq = 0;
@@ -368,7 +500,8 @@
         case "merchant": renderSnapshot(e.snapshot); break;
         case "counters": setCounters(e.counters); break;
         case "action": addLog(e.entry); break;
-        case "call": setCall(e.state, e.transport); if (e.state === "preparing") { $("chat").innerHTML = ""; chatCount = 0; } break;
+        case "reset": onReset(); break;
+        case "call": setCall(e.state, e.transport); controlsCallState(e.state, e.transport); if (e.state === "preparing") { $("chat").innerHTML = ""; chatCount = 0; } break;
         case "transcript": addChat(e.speaker, e.text); break;
         case "latency": setLatency(e.latency); break;
         case "whatsapp": showWhatsapp(e); break;

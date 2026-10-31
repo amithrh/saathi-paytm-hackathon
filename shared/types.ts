@@ -223,7 +223,8 @@ export type ServerEvent =
   | { type: "transcript"; merchantId: string; callId: string; speaker: "saathi" | "merchant"; text: string }
   | { type: "latency"; merchantId: string; callId: string; latency: TurnLatency }
   | { type: "whatsapp"; merchantId: string; to: string; toName: string; text: string; at: string; delivery: WhatsAppDelivery }
-  | { type: "approval"; approval: ApprovalRequest };
+  | { type: "approval"; approval: ApprovalRequest }
+  | { type: "reset"; merchantId: string };
 
 /** What the dashboard renders. Derived from the store, never mutated by clients. */
 export interface MerchantSnapshot {
