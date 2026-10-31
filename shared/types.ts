@@ -83,6 +83,16 @@ export interface SeasonalMonth {
   total: number;
 }
 
+/** Ninety-day history behind the credit signal. Seeded; in production these come from settlement and device logs. */
+export interface CreditHistory {
+  settlementDays90: number;
+  settlementsOnTime90: number;
+  uptimePct30: number;
+  udhaarRecoveredPct: number;
+  priorLoans: number;
+  priorLoansOnTime: number;
+}
+
 export interface LoanProfile {
   creditScore: number;
   existingLoan: boolean;
@@ -138,6 +148,7 @@ export interface Merchant {
   /** Monday to yesterday of the current week, so the scoreboard opens with a week-to-date figure. */
   weekSoFar: Counters;
   loanProfile: LoanProfile;
+  creditHistory: CreditHistory;
   loanOffers: LoanOffer[];
 }
 
@@ -224,7 +235,10 @@ export type ServerEvent =
   | { type: "latency"; merchantId: string; callId: string; latency: TurnLatency }
   | { type: "whatsapp"; merchantId: string; to: string; toName: string; text: string; at: string; delivery: WhatsAppDelivery }
   | { type: "approval"; approval: ApprovalRequest }
-  | { type: "reset"; merchantId: string };
+  | { type: "reset"; merchantId: string }
+  | { type: "fleet"; merchantId: string; status: FleetStatus; text: string; role?: Role; trigger?: string };
+
+export type FleetStatus = "green" | "amber" | "red";
 
 /** What the dashboard renders. Derived from the store, never mutated by clients. */
 export interface MerchantSnapshot {
@@ -240,4 +254,6 @@ export interface MerchantSnapshot {
   /** This session only. */
   todayCounters: Counters;
   clockIst: string;
+  credit: import("../backend/src/credit.js").CreditSignal;
+  cashNeed: import("../backend/src/credit.js").CashNeed;
 }

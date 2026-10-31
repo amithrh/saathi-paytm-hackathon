@@ -3,6 +3,8 @@ import type { WhatsAppSender } from "../../whatsapp/src/client.js";
 import { addDays, daysBetween, istDate, istTime, type Clock } from "./clock.js";
 import { COOLING_OFF_DAYS, evaluateCompliance, HUMAN_APPROVAL_ABOVE, LENDER_NAME, type Kfs } from "./compliance.js";
 import { DEVICE_SILENT_MINUTES, TRIGGER_RULES, UDHAAR_AGEING_DAYS } from "./policy.js";
+import { cashNeed, creditSignal } from "./credit.js";
+export { diwaliDate } from "./credit.js";
 import type { EventBus } from "./events.js";
 import { MerchantStore, NotFoundError } from "./store.js";
 
@@ -83,11 +85,6 @@ function festivalForLanguage(lang: Language): string {
   return lang === "kn-IN" ? "Deepavali" : "Diwali";
 }
 
-export function diwaliDate(year: number): string {
-  // Lakshmi Puja dates. 2026-11-08 is the one that matters for this demo.
-  const table: Record<number, string> = { 2025: "2025-10-20", 2026: "2026-11-08", 2027: "2027-10-29" };
-  return table[year] ?? `${year}-11-01`;
-}
 
 // ---------------------------------------------------------------------------
 // Tool implementations
@@ -318,46 +315,52 @@ export const sendReminder: ToolDef = {
 function loanEligibility(ctx: ToolContext) {
   const m = ctx.store.get(ctx.merchantId);
   const now = ctx.clock.now();
-  const today = istDate(now);
-  const last30 = m.transactions.filter((t) => t.status === "success" && t.channel !== "cash" && t.at >= new Date(now.getTime() - 30 * 86_400_000).toISOString() && t.at <= now.toISOString());
-  const monthlyDigital = last30.reduce((s, t) => s + t.amount, 0);
-  const year = Number(today.slice(0, 4));
-  const diwali = diwaliDate(year);
-  const daysToDiwali = daysBetween(today, diwali);
-  const months = m.seasonalLastYear;
-  const avg = months.reduce((s, x) => s + x.total, 0) / Math.max(1, months.length);
-  const oct = months.find((x) => x.month.endsWith("-10"))?.total ?? avg;
-  const nov = months.find((x) => x.month.endsWith("-11"))?.total ?? avg;
-  const festiveLiftPct = Math.round(((Math.max(oct, nov) - avg) / avg) * 100);
-  const score = m.loanProfile.creditScore;
-  const eligible = score >= 680 && m.loanProfile.monthsOnPaytm >= 6 && !m.loanProfile.existingLoan && monthlyDigital > 40_000;
-  const raw = monthlyDigital * 0.15;
-  const maxAmount = Math.min(200_000, Math.max(10_000, Math.round(raw / 10_000) * 10_000));
-  const festival = festivalForLanguage(m.language);
+  const credit = creditSignal(m, now);
+  const need = cashNeed(m, now);
+  const goodBand = credit.band === "eligible" || credit.band === "strong";
+  const eligible = goodBand && credit.limit > 0 && need.active && !m.loanProfile.existingLoan;
+  const maxAmount = eligible ? credit.limit : 0;
   const tenure = 6;
   const rate = 18;
   const approxMonthly = eligible ? Math.round((maxAmount * (1 + (rate / 100) * (tenure / 12))) / tenure / 10) * 10 : 0;
-  const reasonShort = daysToDiwali > 0 && daysToDiwali <= 30
-    ? `Last year sales rose ${festiveLiftPct}% around ${festival}; ${festival} is on ${diwali}, ${daysToDiwali} days away, so stock-up cash now pays back`
-    : `Stable digital takings of ${inr(monthlyDigital)} in 30 days and a ${score} score`;
+  const seasonal = need.triggers.find((t) => t.kind === "seasonal_stock_up");
+  const stuck = need.triggers.find((t) => t.kind === "stuck_settlement");
+  const reasonShort = seasonal
+    ? `Last year sales rose ${need.festiveLiftPct}% around ${need.festival}; ${need.festival} is on ${need.festivalDate}, ${need.daysToFestival} days away, so stock-up cash now pays back`
+    : stuck
+      ? `Cash is stuck in a settlement (${stuck.detail}); working capital bridges the gap`
+      : `No cash-need trigger right now`;
+  const refusal = eligible
+    ? undefined
+    : !goodBand
+      ? `Credit signal is "${credit.band}" (${credit.score}/100); not offered`
+      : m.loanProfile.existingLoan
+        ? "Merchant has a running loan"
+        : !need.active
+          ? "No active cash-need trigger (no seasonal stock-up window, no stuck settlement)"
+          : "Business too thin for a limit yet";
   return {
     eligible,
-    max_amount: eligible ? maxAmount : 0,
+    max_amount: maxAmount,
     tenure_months: tenure,
     annual_rate_pct: rate,
     approx_monthly_repayment: approxMonthly,
     total_repayment: eligible ? approxMonthly * tenure : 0,
     lender: LENDER_NAME,
     processing_fee: 0,
-    monthly_digital_takings: monthlyDigital,
-    credit_score: score,
+    monthly_digital_takings: credit.monthlyDigital,
+    credit_score: credit.score,
+    credit_band: credit.band,
+    credit_components: credit.components.map((c) => ({ label: c.label, value: c.value, score: c.score, weight: c.weight })),
+    cash_need: need.triggers.map((t) => t.detail),
     months_on_paytm: m.loanProfile.monthsOnPaytm,
     existing_loan: m.loanProfile.existingLoan,
-    festive_lift_last_year_pct: festiveLiftPct,
-    festival,
-    festival_date: diwali,
-    days_to_festival: daysToDiwali,
+    festive_lift_last_year_pct: need.festiveLiftPct,
+    festival: need.festival,
+    festival_date: need.festivalDate,
+    days_to_festival: need.daysToFestival,
     reason_short: reasonShort,
+    ...(refusal ? { not_offered_because: refusal } : {}),
     requires_human_approval_above: HUMAN_APPROVAL_ABOVE,
   };
 }
@@ -372,11 +375,11 @@ export const checkLoanEligibility: ToolDef = {
   },
   summarize(_a, r) {
     const x = r as ReturnType<typeof loanEligibility>;
-    return x.eligible ? `Eligible for ${inr(x.max_amount)} at ${x.annual_rate_pct}% p.a. over ${x.tenure_months} months: ${x.reason_short}` : "Not eligible for a loan right now";
+    return x.eligible ? `Eligible for ${inr(x.max_amount)} at ${x.annual_rate_pct}% p.a. over ${x.tenure_months} months: ${x.reason_short}` : `No offer: ${x.not_offered_because}`;
   },
   source(_a, r) {
     const x = r as ReturnType<typeof loanEligibility>;
-    return `30-day digital settled lines ${inr(x.monthly_digital_takings)} × 15% → ${inr(x.max_amount)}; last year Oct/Nov vs 12-month mean +${x.festive_lift_last_year_pct}%; score ${x.credit_score}`;
+    return `credit signal ${x.credit_score}/100 "${x.credit_band}" (code, 5 components); 30-day digital ${inr(x.monthly_digital_takings)}; cash need: ${x.cash_need.join("; ") || "none"}`;
   },
 };
 

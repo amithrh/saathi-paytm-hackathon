@@ -1,4 +1,4 @@
-import type { Consent, Counters, Device, Language, Merchant, SeasonalMonth, Settlement, Transaction, TxnChannel, UdhaarEntry } from "../../shared/types.js";
+import type { Consent, CreditHistory, Counters, Device, Language, Merchant, SeasonalMonth, Settlement, Transaction, TxnChannel, UdhaarEntry } from "../../shared/types.js";
 import { addDays, istInstant } from "./clock.js";
 import { Rng } from "./rng.js";
 
@@ -157,6 +157,7 @@ function buildRavi(rng: Rng, today: string): Merchant {
     transactions: txns,
     seasonalLastYear: genSeasonal(rng, 320000, 0.42, Number(today.slice(0, 4)) - 1),
     loanProfile: { creditScore: 742, existingLoan: false, monthsOnPaytm: 38 },
+    creditHistory: { settlementDays90: 90, settlementsOnTime90: 82, uptimePct30: 90, udhaarRecoveredPct: 58, priorLoans: 0, priorLoansOnTime: 0 },
     loanOffers: [],
     weekSoFar: { recovered: 2110, collected: 1500, offered: 0, ticketsAvoided: 2 },
   };
@@ -191,6 +192,7 @@ function buildLakshmi(rng: Rng, today: string): Merchant {
     transactions: txns,
     seasonalLastYear: genSeasonal(rng, 265000, 0.35, Number(today.slice(0, 4)) - 1),
     loanProfile: { creditScore: 731, existingLoan: false, monthsOnPaytm: 29 },
+    creditHistory: { settlementDays90: 90, settlementsOnTime90: 84, uptimePct30: 97, udhaarRecoveredPct: 70, priorLoans: 0, priorLoansOnTime: 0 },
     loanOffers: [],
     weekSoFar: { recovered: 0, collected: 800, offered: 0, ticketsAvoided: 1 },
   };
@@ -245,15 +247,56 @@ function buildOther(rng: Rng, idx: number, today: string): Merchant {
     transactions: txns,
     seasonalLastYear: genSeasonal(rng, rng.int(80, 500) * 1000, rng.next() * 0.5, Number(today.slice(0, 4)) - 1),
     loanProfile: { creditScore: rng.int(600, 800), existingLoan: rng.chance(0.3), monthsOnPaytm: rng.int(3, 60) },
+    creditHistory: creditHistoryFor(idx),
     loanOffers: [],
     weekSoFar: { recovered: rng.int(0, 60) * 50, collected: rng.int(0, 40) * 50, offered: 0, ticketsAvoided: rng.int(0, 3) } as Counters,
   };
 }
+
+/** Own RNG per merchant so adding this history does not shift any other seeded value. */
+function creditHistoryFor(idx: number): CreditHistory {
+  const r = new Rng(SEED * 31 + idx * 7919);
+  const priorLoans = r.int(0, 3);
+  return {
+    settlementDays90: 90,
+    settlementsOnTime90: r.int(70, 90),
+    uptimePct30: r.int(82, 99),
+    udhaarRecoveredPct: r.int(40, 90),
+    priorLoans,
+    priorLoansOnTime: priorLoans ? r.int(Math.max(0, priorLoans - 1), priorLoans) : 0,
+  };
+}
+
+/** The ten merchants on the fleet view. Ravi and Lakshmi plus eight calm neighbours. */
+export const FLEET_IDS = ["m001", "m002", "m003", "m004", "m005", "m006", "m008", "m010", "m012", "m014"] as const;
+/** The fleet merchant shown as "not yet" for credit, so the audience sees a refusal. */
+export const NOT_YET_ID = "m006";
 
 /** Twenty merchants, deterministic for a given `today` (IST YYYY-MM-DD). */
 export function buildMerchants(today: string, seed = SEED): Merchant[] {
   const rng = new Rng(seed);
   const out: Merchant[] = [buildRavi(rng, today), buildLakshmi(rng, today)];
   for (let i = 3; i <= 20; i++) out.push(buildOther(rng, i, today));
+  // Fleet neighbours open calm: devices heartbeating, settlements credited. The fleet scene injects incidents live.
+  for (const m of out) {
+    if (!(FLEET_IDS as readonly string[]).includes(m.id) || m.id === "m001" || m.id === "m002") continue;
+    for (const d of m.devices) {
+      d.status = "online";
+      d.events = [];
+      d.lastHeartbeat = istInstant(today, 8, 5).toISOString();
+    }
+    for (const st of m.settlements) {
+      if (st.status !== "settled") {
+        st.status = "settled";
+        st.bankRef = `UTR${String(st.amount).padStart(6, "0")}${st.date.replace(/-/g, "")}`;
+        delete st.failureReason;
+      }
+    }
+  }
+  const weak = out.find((m) => m.id === NOT_YET_ID);
+  if (weak) {
+    weak.creditHistory = { settlementDays90: 90, settlementsOnTime90: 50, uptimePct30: 78, udhaarRecoveredPct: 25, priorLoans: 2, priorLoansOnTime: 0 };
+    weak.loanProfile.existingLoan = false;
+  }
   return out;
 }

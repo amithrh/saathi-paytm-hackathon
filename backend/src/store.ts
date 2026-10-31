@@ -3,6 +3,7 @@ import type {
 } from "../../shared/types.js";
 import { addDays, istDate, istInstant, istTime, type Clock } from "./clock.js";
 import { buildMerchants } from "./seed.js";
+import { cashNeed, creditSignal } from "./credit.js";
 
 export interface ComplianceTicket {
   id: string;
@@ -119,6 +120,29 @@ export class MerchantStore {
     return { recovered: w.recovered + live.recovered, collected: w.collected + live.collected, offered: w.offered + live.offered, ticketsAvoided: w.ticketsAvoided + live.ticketsAvoided };
   }
 
+  /** Fleet scene: a Soundbox stops heartbeating `minutesAgo` minutes ago while payments keep landing. */
+  injectDeviceSilence(merchantId: string, minutesAgo: number, unconfirmed: { count: number; amount: number }): void {
+    const m = this.get(merchantId);
+    const d = m.devices.find((x) => x.type === "soundbox");
+    if (!d) throw new NotFoundError(`soundbox for ${merchantId}`);
+    const at = new Date(this.clock.now().getTime() - minutesAgo * 60_000).toISOString();
+    d.status = "offline";
+    d.lastHeartbeat = at;
+    d.events.push({ at, kind: "offline", note: `Silent for ${minutesAgo} min while ${unconfirmed.count} payments landed in the app unannounced`, unconfirmed });
+    this.changed(merchantId);
+  }
+
+  /** Fleet scene: the oldest open udhaar line crosses the ageing threshold. Returns that line. */
+  ageUdhaar(merchantId: string, days: number): Merchant["udhaar"][number] {
+    const m = this.get(merchantId);
+    const open = m.udhaar.filter((u) => u.status === "outstanding").sort((a, b) => b.amount - a.amount);
+    const u = open[0];
+    if (!u) throw new NotFoundError(`open udhaar for ${merchantId}`);
+    u.since = addDays(istDate(this.clock.now()), -days);
+    this.changed(merchantId);
+    return u;
+  }
+
   /** The human hands an approved offer to the lending partner. The agent has no path to this. */
   handoffLoan(offerId: string): LoanOffer {
     for (const m of this.merchants.values()) {
@@ -151,6 +175,8 @@ export class MerchantStore {
       counters: this.weekCounters(merchantId),
       todayCounters: this.counters(merchantId),
       clockIst: `${istDate(now)} ${istTime(now)} IST`,
+      credit: creditSignal(m, now),
+      cashNeed: cashNeed(m, now),
     };
   }
 
