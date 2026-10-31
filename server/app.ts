@@ -77,6 +77,15 @@ export function wireSimulations(deps: AppDeps): void {
 
 export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   const app = Fastify({ logger: false });
+  // Twilio delivers its voice and status webhooks as form POSTs. Without this parser
+  // Fastify answers 415 before the route runs and the caller hears "check your URL".
+  app.addContentTypeParser("application/x-www-form-urlencoded", { parseAs: "string" }, (_req, body, done) => {
+    try {
+      done(null, Object.fromEntries(new URLSearchParams(String(body))));
+    } catch (e) {
+      done(e as Error);
+    }
+  });
   await app.register(fastifyWebsocket);
   await app.register(fastifyStatic, { root: path.join(ROOT, "dashboard", "public"), prefix: "/dashboard/", decorateReply: true });
   await app.register(fastifyStatic, { root: path.join(ROOT, "voice", "public"), prefix: "/call/", decorateReply: false });

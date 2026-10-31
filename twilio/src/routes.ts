@@ -74,6 +74,7 @@ export async function registerTwilioRoutes(app: FastifyInstance, deps: TwilioRou
 
   /** TwiML webhook. With a token: an outbound call we prepared. Without: an inbound call to the demo merchant. */
   app.all<{ Querystring: { token?: string; merchant?: string } }>("/twilio/voice", async (req, reply) => {
+    deps.log?.(`twilio: voice webhook ${req.method} token=${req.query.token ? "yes" : "none"} from ${req.ip}`);
     let token = req.query.token;
     if (!token || !prepared.has(token)) {
       token = randomUUID();
