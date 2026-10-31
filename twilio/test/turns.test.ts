@@ -29,6 +29,15 @@ describe("TwiML builders", () => {
 });
 
 describe("phone audio", () => {
+  it("serves a pending entry once it resolves", async () => {
+    const s = new PhoneAudioStore();
+    const slot = s.pending();
+    const got = s.get(slot.id) as Promise<Buffer>;
+    slot.resolve(Buffer.from("x"));
+    expect((await got).toString()).toBe("x");
+    await Promise.resolve();
+    expect(s.get(slot.id)).toEqual(Buffer.from("x"));
+  });
   it("joins chunks of any rate into one 8 kHz mono WAV with gaps", () => {
     const a = pcm16ToWav(tone(440, 1, 22050), 22050);
     const b = pcm16ToWav(tone(440, 0.5, 16000), 16000);
@@ -95,7 +104,10 @@ describe("turn-based phone call over /twilio/voice and /twilio/gather", () => {
     let next = actionOf(voice.body);
     expect(next).toBe(`https://saathi.example.app/twilio/gather?token=${token}`);
     const t1 = await app.inject({ method: "POST", url: path(next), ...form({ SpeechResult: "हाँ, सुरेश को रिमाइंडर भेजो", Confidence: "0.91" }) });
-    expect(playUrls(t1.body)).toHaveLength(1);
+    // One Play per sentence so Twilio starts after the first TTS call; every URL serves 8 kHz audio.
+    const t1Urls = playUrls(t1.body);
+    expect(t1Urls.length).toBeGreaterThan(2);
+    for (const u of t1Urls) expect(wavToPcm16((await app.inject({ method: "GET", url: path(u) })).rawPayload).sampleRate).toBe(8000);
     expect(store.get(RAVI_ID).udhaar.find((u) => u.customerId === "c-suresh")!.status).toBe("reminded");
 
     // Silence once: short re-prompt, no agent turn.
@@ -135,6 +147,23 @@ describe("turn-based phone call over /twilio/voice and /twilio/gather", () => {
     const before = sessions.at(-1)!.latencies.length;
     await app.inject({ method: "POST", url: path(actionOf(e1.body)), ...form({ SpeechResult: "" }) });
     expect(sessions.at(-1)!.latencies.length).toBe(before + 1);
+  });
+
+  it("keeps each turn's audio separate when the merchant barges in before the reply finished", async () => {
+    const dial = await app.inject({ method: "POST", url: "/twilio/call", payload: { merchantId: RAVI_ID } });
+    const token = dial.json().token as string;
+    const voice = await app.inject({ method: "POST", url: `/twilio/voice?token=${token}`, ...form({}) });
+    // Fire two turns back to back without waiting for the first reply's audio.
+    const [a, b] = await Promise.all([
+      app.inject({ method: "POST", url: path(actionOf(voice.body)), ...form({ SpeechResult: "हाँ, सुरेश को रिमाइंडर भेजो" }) }),
+      app.inject({ method: "POST", url: path(actionOf(voice.body)), ...form({ SpeechResult: "हाँ लोन चाहिए" }) }),
+    ]);
+    const ua = playUrls(a.body);
+    const ub = playUrls(b.body);
+    expect(ua.length).toBeGreaterThan(2); // reminder confirmation + loan pitch
+    expect(ub.length).toBeGreaterThanOrEqual(1);
+    expect(new Set([...ua, ...ub]).size).toBe(ua.length + ub.length);
+    for (const u of [...ua, ...ub]) expect(wavToPcm16((await app.inject({ method: "GET", url: path(u) })).rawPayload).samples.length).toBeGreaterThan(800);
   });
 
   it("refuses unknown audio ids and a second answer of the same call", async () => {

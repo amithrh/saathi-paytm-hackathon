@@ -17,17 +17,28 @@ export function joinForPhone(wavs: Buffer[], gapMs = 120): Buffer {
   return pcm16ToWav(concatInt16(parts), PHONE_RATE);
 }
 
-/** In-memory store of per-turn audio that Twilio fetches over HTTPS. Bounded; oldest evicted. */
+/**
+ * In-memory store of per-turn audio that Twilio fetches over HTTPS. Bounded; oldest evicted.
+ * An entry may be pending: Twilio is given the URL before the audio exists and the fetch waits for it.
+ */
 export class PhoneAudioStore {
-  private readonly files = new Map<string, Buffer>();
+  private readonly files = new Map<string, Buffer | Promise<Buffer>>();
   constructor(private readonly max = 300) {}
-  put(wav: Buffer): string {
+  put(wav: Buffer | Promise<Buffer>): string {
     const id = randomUUID().replace(/-/g, "");
     this.files.set(id, wav);
     while (this.files.size > this.max) this.files.delete(this.files.keys().next().value as string);
     return id;
   }
-  get(id: string): Buffer | undefined {
+  /** Reserve an id now, fill it later. */
+  pending(): { id: string; resolve: (wav: Buffer) => void } {
+    let resolve: (wav: Buffer) => void = () => undefined;
+    const p = new Promise<Buffer>((r) => (resolve = r));
+    const id = this.put(p);
+    p.then((wav) => this.files.has(id) && this.files.set(id, wav));
+    return { id, resolve };
+  }
+  get(id: string): Buffer | Promise<Buffer> | undefined {
     return this.files.get(id);
   }
   get size(): number {

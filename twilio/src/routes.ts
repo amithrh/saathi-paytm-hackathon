@@ -3,6 +3,7 @@ import type { FastifyInstance } from "fastify";
 import type { CallEvent, CallSession } from "../../voice/src/pipeline.js";
 import { attachTwilioMediaStream, connectStreamTwiml } from "./media-stream.js";
 import { placeCall, twilioCredentialsFromEnv } from "./rest.js";
+import { pcm16ToWav } from "../../voice/src/audio.js";
 import { errorTwiml, joinForPhone, PhoneAudioStore, playThenGatherTwiml, playThenHangupTwiml, REPROMPT } from "./turns.js";
 
 export interface TwilioRouteDeps {
@@ -19,6 +20,9 @@ interface Prepared {
   setEventSink: (fn: (e: CallEvent) => void) => void;
   /** Turn-based phone path: consecutive empty SpeechResults. */
   empties: number;
+  /** Turn-based phone path: listeners for session events, and the highest audio seq seen. */
+  listeners: Set<(e: CallEvent) => void>;
+  lastSeq: number;
 }
 
 /**
@@ -36,8 +40,13 @@ export async function registerTwilioRoutes(app: FastifyInstance, deps: TwilioRou
 
   function prepare(merchantId: string): Prepared {
     let sink: (e: CallEvent) => void = () => undefined;
-    const session = deps.makeSession(merchantId, (e) => sink(e));
-    const p: Prepared = { session, merchantId, setEventSink: (fn) => (sink = fn), empties: 0 };
+    const listeners = new Set<(e: CallEvent) => void>();
+    const p: Prepared = { session: undefined as unknown as CallSession, merchantId, setEventSink: (fn) => (sink = fn), empties: 0, listeners, lastSeq: 0 };
+    p.session = deps.makeSession(merchantId, (e) => {
+      for (const l of [...listeners]) l(e);
+      if (e.type === "audio") p.lastSeq = Math.max(p.lastSeq, e.seq);
+      sink(e);
+    });
     return p;
   }
 
@@ -49,16 +58,58 @@ export async function registerTwilioRoutes(app: FastifyInstance, deps: TwilioRou
   const audio = new PhoneAudioStore();
   const baseUrl = (host: string | undefined) => (deps.publicBaseUrl ?? `https://${host ?? "localhost"}`).replace(/\/$/, "");
 
-  /** Run fn while capturing the audio chunks the session emits; return one phone WAV URL. */
-  async function captureTurn(p: Prepared, host: string | undefined, fn: () => Promise<void>): Promise<string[]> {
-    const chunks: Buffer[] = [];
-    p.setEventSink((e) => {
-      if (e.type === "audio") chunks.push(e.wav);
+  /**
+   * Run one session turn and return Play URLs as soon as the first sentence is synthesised.
+   * Each later sentence gets a URL straight away whose fetch waits for its audio, so Twilio starts
+   * talking after one TTS call instead of all of them. Resolves with [] if the turn produced no audio.
+   */
+  function captureTurn(p: Prepared, host: string | undefined, fn: () => Promise<void>): Promise<string[]> {
+    return new Promise<string[]>((resolveUrls, reject) => {
+      let slots: Array<{ id: string; resolve: (wav: Buffer) => void }> | undefined;
+      // Lock onto this turn's audio: a barge-in can start the next turn while this one still synthesises.
+      const after = p.lastSeq;
+      let mine: number | undefined;
+      const url = (id: string) => `${baseUrl(host)}/twilio/audio/${id}.wav`;
+      const silence = () => pcm16ToWav(new Int16Array(800), 8000); // 100 ms, only if a chunk never arrives
+      const listener = (e: CallEvent) => {
+        if (e.type !== "audio" || e.seq <= after || (mine !== undefined && e.seq !== mine)) return;
+        mine = e.seq;
+        if (!slots) {
+          slots = Array.from({ length: e.chunks }, () => audio.pending());
+          resolveUrls(slots.map((s) => url(s.id)));
+        }
+        slots[e.chunk]?.resolve(joinForPhone([e.wav], 0));
+      };
+      p.listeners.add(listener);
+      const done = () => {
+        p.listeners.delete(listener);
+        for (const s of slots ?? []) s.resolve(silence()); // no-op for slots already filled
+      };
+      fn()
+        .then(() => {
+          done();
+          if (!slots) resolveUrls([]);
+        })
+        .catch((err) => {
+          done();
+          reject(err);
+        });
     });
-    await fn();
-    p.setEventSink(() => undefined);
-    if (!chunks.length) return [];
-    return [`${baseUrl(host)}/twilio/audio/${audio.put(joinForPhone(chunks))}.wav`];
+  }
+
+  /** The prepared opening: wait for every chunk, join into one file (it is ready before the phone rings). */
+  async function captureWhole(p: Prepared, host: string | undefined, fn: () => Promise<void>): Promise<string[]> {
+    const chunks: Buffer[] = [];
+    const listener = (e: CallEvent) => {
+      if (e.type === "audio") chunks.push(e.wav);
+    };
+    p.listeners.add(listener);
+    try {
+      await fn();
+    } finally {
+      p.listeners.delete(listener);
+    }
+    return chunks.length ? [`${baseUrl(host)}/twilio/audio/${audio.put(joinForPhone(chunks))}.wav`] : [];
   }
 
   async function lineUrl(p: Prepared, host: string | undefined, text: string): Promise<string> {
@@ -68,8 +119,9 @@ export async function registerTwilioRoutes(app: FastifyInstance, deps: TwilioRou
   const gatherUrl = (host: string | undefined, token: string) => `${baseUrl(host)}/twilio/gather?token=${encodeURIComponent(token)}`;
 
   app.get<{ Params: { file: string } }>("/twilio/audio/:file", async (req, reply) => {
-    const wav = audio.get(req.params.file.replace(/\.wav$/, ""));
-    if (!wav) return reply.code(404).send({ error: "no such audio" });
+    const entry = audio.get(req.params.file.replace(/\.wav$/, ""));
+    if (!entry) return reply.code(404).send({ error: "no such audio" });
+    const wav = await entry;
     return reply.type("audio/wav").header("Cache-Control", "no-store").send(wav);
   });
 
@@ -89,6 +141,7 @@ export async function registerTwilioRoutes(app: FastifyInstance, deps: TwilioRou
       }
       p.empties = 0;
       const urls = await captureTurn(p, host, () => p.session.handleText(said));
+      // agentEnded is settled before the first audio chunk exists, so it is safe to read here.
       if (p.session.agentEnded) {
         prepared.delete(token);
         return reply.send(playThenHangupTwiml(urls));
@@ -153,7 +206,7 @@ export async function registerTwilioRoutes(app: FastifyInstance, deps: TwilioRou
     const p = prepared.get(token)!;
     if (p.session.currentState !== "ringing") return reply.type("text/xml").send(errorTwiml("This call was already answered."));
     try {
-      const urls = await captureTurn(p, req.headers.host, () => p.session.answer());
+      const urls = await captureWhole(p, req.headers.host, () => p.session.answer());
       return reply.type("text/xml").send(playThenGatherTwiml({ audioUrls: urls, actionUrl: gatherUrl(req.headers.host, token), language: p.session.language }));
     } catch (e) {
       deps.log?.(`twilio: answer failed: ${(e as Error).message}`);
