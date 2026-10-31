@@ -287,7 +287,8 @@
   $("startDemo").addEventListener("click", async () => {
     const who = $("startWho").value;
     $("startDemo").disabled = true; $("ctlMsg").textContent = "";
-    const r = await fetch("/api/demo/start", { method: "POST", headers: { "Content-Type": "application/json", ...(demoKey ? { "X-Demo-Key": demoKey } : {}) }, body: JSON.stringify({ merchantId: who }) });
+    let to; try { to = localStorage.getItem("saathiDemoPhone") || undefined; } catch {}
+    const r = await fetch("/api/demo/start", { method: "POST", headers: { "Content-Type": "application/json", ...(demoKey ? { "X-Demo-Key": demoKey } : {}) }, body: JSON.stringify({ merchantId: who, ...(to ? { to } : {}) }) });
     const j = await r.json().catch(() => ({}));
     if (!r.ok) { $("ctlMsg").textContent = j.error || `HTTP ${r.status}`; $("startDemo").disabled = false; return; }
     followId = who; followFrom = lastSeq; followBack = j.returnAfterDialMs || 2000;

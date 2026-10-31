@@ -108,7 +108,7 @@ export const getBriefing: ToolDef = {
       const issue = off && (!restart || restart.at < off.at)
         ? { offline_since_ist: istTime(new Date(off.at)), offline_date: istDate(new Date(off.at)), unconfirmed_payments: off.unconfirmed?.count ?? 0, unconfirmed_amount: off.unconfirmed?.amount ?? 0 }
         : undefined;
-      return { device_id: d.id, type: d.type, status: d.status, ...(issue ? { issue } : {}), ...(restart ? { last_restart_ist: istTime(new Date(restart.at)), restart_note: restart.note } : {}) };
+      return { device_id: d.id, type: d.type, status: d.status, ...(issue ? { issue } : {}), ...(restart ? { last_restart_ist: istTime(new Date(restart.at)), restart_note: restart.note, ...(restart.unconfirmed ? { restart_confirmed_payments: restart.unconfirmed.count, restart_confirmed_amount: restart.unconfirmed.amount } : {}) } : {}) };
     });
     const failed = m.settlements.filter((s) => s.status === "failed").map((s) => ({ settlement_id: s.id, amount: s.amount, date: s.date, reason: s.failureReason }));
     const udhaar = m.udhaar

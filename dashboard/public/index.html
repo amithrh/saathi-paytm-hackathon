@@ -388,7 +388,7 @@
     const tick = d.mode === "live" ? "✓✓" : d.mode === "failed" ? "✕" : "✓";
     $("waStatus").textContent = status;
     $("waStatus").style.color = d.mode === "failed" ? "#dc2626" : d.mode === "live" ? "#166534" : "";
-    $("wa").innerHTML = `<div class="wa"><div class="to">To ${esc(e.toName)} · ${esc(e.to)}</div>${esc(e.text).replace(/(upi:\/\/\S+)/, '<u>$1</u><span class="p2m">P2M link · no collect request</span>')}<span class="tick">${tick} ${timeOf(e.at).slice(0, 5)}</span></div>`;
+    $("wa").innerHTML = `<div class="wa"><div class="to">To ${esc(e.toName)} · ${esc(mask(e.to))}</div>${esc(e.text).replace(/(upi:\/\/\S+)/, '<u>$1</u><span class="p2m">P2M link · no collect request</span>')}<span class="tick">${tick} ${timeOf(e.at).slice(0, 5)}</span></div>`;
   }
 
   $("policyBtn").addEventListener("click", async () => {
@@ -436,7 +436,8 @@
   ctlFetch(`/api/demo/config?merchant=${encodeURIComponent(merchantId)}`).then((c) => {
     if (!c.controls) { $("ctlLocked").hidden = false; return; }
     $("ctlCall").hidden = false; $("ctlReset").hidden = false; $("ctlFleet").hidden = false; $("ctlDown").hidden = false; $("ctlStart").hidden = false;
-    $("ctlPhone").dataset.value = c.demoPhone; maskedInput($("ctlPhone"));
+    let savedPhone = ""; try { savedPhone = localStorage.getItem("saathiDemoPhone") || ""; } catch {}
+    $("ctlPhone").dataset.value = savedPhone || c.demoPhone; maskedInput($("ctlPhone"), (v) => { try { if (v && v !== c.demoPhone) localStorage.setItem("saathiDemoPhone", v); else localStorage.removeItem("saathiDemoPhone"); } catch {} });
     if (!c.twilioConfigured) { $("ctlRing").disabled = true; status("ctlCallSt", "Twilio not configured in .env", "err"); }
     if (c.customer) {
       $("ctlWa").hidden = false;

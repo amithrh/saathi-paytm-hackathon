@@ -110,6 +110,8 @@ export async function bringSoundboxDown(d: BringDownDeps): Promise<BringDownOutc
     note("Manager", "escalate_to_call", `Escalating to a call: ${inr(pending.amount)} the merchant never heard about, and udhaar ${oldest} days old needs the merchant's yes`, "rule: unannounced money plus udhaar ≥ 10 days → talk to the merchant");
     monitor.set(id, { status: "amber", role: "Manager", trigger, text: `Manager: escalating to a call · calling ${first}` });
     const dial = await d.dial(id, d.to);
+    // Reset pressed while the call was being prepared: do not repaint the freshly reset tile.
+    if (store.generation !== gen) return { unannounced: { count: 0, amount: 0 }, escalated: false, dial };
     if (dial.ok) {
       note("Manager", "dial", `Calling ${first} now (Twilio ${dial.status})`, `call ${dial.callSid}`);
       monitor.set(id, { status: "amber", role: "Manager", trigger, text: `Manager: calling ${first} · phone ringing` });

@@ -42,8 +42,19 @@ export interface AppDeps {
 }
 
 export function makeSessionFactory(deps: AppDeps, transport: string) {
-  return (merchantId: string, onEvent: (e: CallEvent) => void): CallSession =>
-    new CallSession({ merchantId, store: deps.store, clock: deps.clock, llm: deps.llmFor ? deps.llmFor(merchantId) : deps.llm, speech: deps.speech, bus: deps.bus, transport, onEvent, ...(deps.whatsapp ? { whatsapp: deps.whatsapp } : {}), ...(deps.customerPhones ? { customerPhones: deps.customerPhones } : {}), ...(deps.log ? { log: deps.log } : {}) });
+  return (merchantId: string, onEvent: (e: CallEvent) => void): CallSession => {
+    let off: (() => void) | undefined;
+    const wrapped = (e: CallEvent) => {
+      if (e.type === "state" && e.state === "ended") off?.();
+      onEvent(e);
+    };
+    const session = new CallSession({ merchantId, store: deps.store, clock: deps.clock, llm: deps.llmFor ? deps.llmFor(merchantId) : deps.llm, speech: deps.speech, bus: deps.bus, transport, onEvent: wrapped, ...(deps.whatsapp ? { whatsapp: deps.whatsapp } : {}), ...(deps.customerPhones ? { customerPhones: deps.customerPhones } : {}), ...(deps.log ? { log: deps.log } : {}) });
+    // A scene reset ends any call still running for this merchant, so it cannot write into the fresh scene.
+    off = deps.bus.subscribe((e) => {
+      if (e.type === "reset" && e.merchantId === merchantId) session.hangup("scene reset");
+    });
+    return session;
+  };
 }
 
 /** Wires the mock customer who pays after a reminder, and snapshot/counter pushes on store changes. */
@@ -66,7 +77,7 @@ export function wireSimulations(deps: AppDeps): void {
   });
   if (deps.simulatedPaymentDelayMs > 0) {
     bus.subscribe((e) => {
-      if (e.type !== "whatsapp" || e.delivery.mode === "live") return;
+      if (e.type !== "whatsapp" || e.delivery.mode !== "mock") return;
       const merchant = store.get(e.merchantId);
       const u = merchant.udhaar.find((x) => x.customerName === e.toName);
       if (!u) return;
