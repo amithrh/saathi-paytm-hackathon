@@ -280,7 +280,7 @@ export const sendReminder: ToolDef = {
     // Verified-merchant P2M pay intent: merchant VPA, merchant category code, transaction reference. Never a P2P collect request.
     const txnRef = `SAATHI${u.customerId.replace(/[^a-z0-9]/gi, "").toUpperCase().slice(0, 12)}${istDate(ctx.clock.now()).replace(/-/g, "")}`;
     const upiLink = `upi://pay?pa=${m.mid.toLowerCase()}@paytm&pn=${encodeURIComponent(m.shopName)}&mc=5411&tr=${txnRef}&am=${u.amount}&cu=INR&tn=Udhaar`;
-    const text = reminderText(m.language, m.shopName, m.ownerName, u.customerName, u.amount, upiLink);
+    const text = reminderText(m.language, m.shopName, nameInScript(m.ownerName, m.language), nameInScript(u.customerName, m.language), u.amount, upiLink);
     ctx.store.consumeTicket(ticket.id);
     const realPhone = ctx.customerPhones?.[customerId];
     let delivery: WhatsAppDelivery = { mode: "mock", note: "shown on dashboard and logged; real send is a transport swap" };

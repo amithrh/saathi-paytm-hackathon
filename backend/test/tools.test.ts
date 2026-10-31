@@ -121,7 +121,7 @@ describe("compliance gate on send_reminder", async () => {
     const out = await runToolByName("send_reminder", { customer_id: "c-suresh", compliance_ticket: ticket }, ctx);
     expect(out.ok).toBe(true);
     expect(out.result).toMatchObject({ channel: "whatsapp", to: "Suresh", amount: 2300 });
-    expect((out.result as any).message).toMatch(/सुरेश|Suresh/);
+    expect((out.result as any).message).toMatch(/नमस्ते सुरेश जी/);
     expect((out.result as any).message).toContain("upi://pay?pa=ptm-jay-00117@paytm");
     expect((out.result as any).message).toMatch(/&mc=5411&tr=SAATHICSURESH20261031&am=2300&cu=INR/);
     expect((out.result as any).message).not.toMatch(/collect/i);
