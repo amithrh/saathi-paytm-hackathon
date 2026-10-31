@@ -6,7 +6,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { ChatClient } from "../agent/src/llm.js";
 import type { Clock } from "../backend/src/clock.js";
-import { EventBus } from "../backend/src/events.js";
+import { EventBus, matchesMerchant } from "../backend/src/events.js";
 import { registerBackendRoutes } from "../backend/src/http.js";
 import { MerchantStore } from "../backend/src/store.js";
 import type { ServerEvent } from "../shared/types.js";
@@ -90,10 +90,19 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   app.get("/call", async (_req, reply) => reply.type("text/html").send(callHtml()));
   app.get("/dashboard", async (_req, reply) => reply.type("text/html").send(dashHtml()));
 
+  // Polling twin of /events for clients behind proxies that buffer streams (tunnels, venue Wi-Fi).
+  app.get<{ Params: { id: string }; Querystring: { since?: string } }>("/api/merchants/:id/events", async (req) => {
+    const after = Number(req.query.since ?? 0);
+    return deps.bus.since(Number.isFinite(after) ? after : 0, req.params.id);
+  });
+
   app.get<{ Querystring: { merchant?: string } }>("/events", (req, reply) => {
     const merchantId = req.query.merchant;
-    reply.raw.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", Connection: "keep-alive", "Access-Control-Allow-Origin": "*" });
-    const write = (e: ServerEvent) => reply.raw.write(`data: ${JSON.stringify(e)}\n\n`);
+    // no-transform and the 2 KB padding comment stop proxies (Cloudflare tunnel, nginx) from
+    // buffering the stream; without them the dashboard stays empty behind a tunnel.
+    reply.raw.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache, no-transform", Connection: "keep-alive", "X-Accel-Buffering": "no", "Access-Control-Allow-Origin": "*" });
+    reply.raw.write(`: ${" ".repeat(2048)}\n\n`);
+    const write = (e: ServerEvent, seq?: number) => reply.raw.write(`data: ${JSON.stringify(seq === undefined ? e : { ...e, seq })}\n\n`);
     if (merchantId) {
       try {
         write({ type: "merchant", merchantId, snapshot: deps.store.snapshot(merchantId) });
@@ -101,10 +110,9 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
         reply.raw.write(`event: error\ndata: ${JSON.stringify({ message: "unknown merchant" })}\n\n`);
       }
     }
-    for (const e of deps.bus.recent(merchantId)) if (e.type !== "merchant" && e.type !== "counters") write(e);
-    const unsubscribe = deps.bus.subscribe((e) => {
-      if (!merchantId) return write(e);
-      if (e.type === "approval" ? e.approval.merchantId === merchantId : e.type === "action" ? e.entry.merchantId === merchantId : e.merchantId === merchantId) write(e);
+    for (const e of deps.bus.since(0, merchantId).events) if (e.type !== "merchant" && e.type !== "counters") write(e, e.seq);
+    const unsubscribe = deps.bus.subscribe((e, seq) => {
+      if (matchesMerchant(e, merchantId)) write(e, seq);
     });
     const ping = setInterval(() => reply.raw.write(": ping\n\n"), 15_000);
     req.raw.on("close", () => {

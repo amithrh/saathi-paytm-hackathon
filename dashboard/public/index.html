@@ -332,12 +332,38 @@
     p.hidden = false;
   });
 
+  // Two feeds, one handler. The stream is primary; if a proxy buffers or drops it, the
+  // dashboard polls the same events by sequence number so the projector never goes blank.
+  let lastSeq = 0;
+  let streamAlive = false;
+  let pollTimer = null;
+
+  async function poll() {
+    try {
+      const d = await fetch(`/api/merchants/${encodeURIComponent(merchantId)}/events?since=${lastSeq}`).then((r) => r.json());
+      for (const e of d.events) handle(e);
+      if (!streamAlive) $("conn").textContent = "live (poll)";
+    } catch {
+      $("conn").textContent = "reconnecting…";
+    }
+  }
+  function startPolling() {
+    if (pollTimer) return;
+    poll();
+    pollTimer = setInterval(poll, 1200);
+  }
+
   function connect() {
+    fetch(`/api/merchants/${encodeURIComponent(merchantId)}/snapshot`).then((r) => r.json()).then(renderSnapshot).catch(() => {});
     const es = new EventSource(`/events?merchant=${encodeURIComponent(merchantId)}`);
     es.onopen = () => { $("conn").textContent = "live"; };
-    es.onerror = () => { $("conn").textContent = "reconnecting…"; };
-    es.onmessage = (ev) => {
-      const e = JSON.parse(ev.data);
+    es.onerror = () => { $("conn").textContent = "reconnecting…"; startPolling(); };
+    es.onmessage = (ev) => { streamAlive = true; handle(JSON.parse(ev.data)); };
+    setTimeout(() => { if (!streamAlive) startPolling(); }, 3000);
+  }
+
+  function handle(e) {
+      if (typeof e.seq === "number") { if (e.seq <= lastSeq) return; lastSeq = e.seq; }
       switch (e.type) {
         case "merchant": renderSnapshot(e.snapshot); break;
         case "counters": setCounters(e.counters); break;
@@ -348,7 +374,6 @@
         case "whatsapp": showWhatsapp(e); break;
         case "approval": fetch(`/api/merchants/${merchantId}/snapshot`).then((r) => r.json()).then(renderSnapshot); break;
       }
-    };
   }
   connect();
 })();
