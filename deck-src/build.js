@@ -321,7 +321,7 @@ function bullets(slide, items, opts) {
     // Bottom strip: measured facts
     const facts = [
       [fa.FaStopwatch, "Measured 30 Oct", "1.5 to 3.2 s from end of speech to first word back. The opening briefing is prepared while the phone rings."],
-      [fa.FaVial, "Tested", "Typecheck and 65 unit tests. Live LLM tests in Hindi and Kannada assert compliance runs before every gated action."],
+      [fa.FaVial, "Tested", "Typecheck and 86 unit tests in 12 files. Live LLM tests in Hindi and Kannada assert compliance runs before every gated action."],
       [fa.FaPlug, "Swappable", "Node and TypeScript. Every tool has an HTTP surface, so a real Paytm API drops in without touching the agent."],
     ];
     const fw = (12.1 - 2 * 0.2) / 3;
