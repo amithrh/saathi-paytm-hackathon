@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import type { AppDeps } from "./app.js";
+import { runFleetScene } from "../backend/src/fleet.js";
 
 /** Which customer gets the live reminder in each demo scene. */
 export const SCENE_CUSTOMER: Record<string, { customerId: string; name: string; envKey: string }> = {
@@ -75,6 +76,31 @@ export async function registerDemoRoutes(app: FastifyInstance, deps: AppDeps, en
       const msg = (e as Error).message;
       return reply.code(502).send({ error: /63015|21654|sandbox/i.test(msg) ? `${msg}. ${SANDBOX_JOIN_HINT}` : msg });
     }
+  });
+
+  app.get("/api/fleet", async () => deps.monitor!.snapshot());
+
+  /** Every event, all merchants: the fleet page's polling twin of /events. */
+  app.get<{ Querystring: { since?: string } }>("/api/fleet/events", async (req) => {
+    const after = Number(req.query.since ?? 0);
+    return deps.bus.since(Number.isFinite(after) ? after : 0);
+  });
+
+  /** Start the ~60 s fleet scene in the background. Body or query `speed` slows it (2 = half speed). */
+  app.post<{ Body: { speed?: number } | undefined; Querystring: { speed?: string } }>("/api/demo/fleet-scene", async (req, reply) => {
+    if (!isTrustedControl(req, env)) return reply.code(403).send(deny);
+    if (deps.monitor!.sceneRunning) return reply.code(409).send({ error: "fleet scene already running" });
+    const speed = Number(req.body?.speed ?? req.query.speed ?? env.FLEET_SCENE_SPEED ?? 1);
+    void runFleetScene({
+      store: deps.store,
+      clock: deps.clock,
+      bus: deps.bus,
+      monitor: deps.monitor!,
+      toolExtras: { ...(deps.whatsapp ? { whatsapp: deps.whatsapp } : {}), ...(deps.customerPhones ? { customerPhones: deps.customerPhones } : {}) },
+      speed: Number.isFinite(speed) && speed > 0 ? speed : 1,
+      ...(deps.log ? { log: deps.log } : {}),
+    }).catch((e) => deps.log?.(`fleet scene error: ${(e as Error).message}`));
+    return reply.code(202).send({ ok: true, speed });
   });
 
   /** Back to the opening scene: reseeded store, cleared live panels, clock untouched. */

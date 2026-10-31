@@ -12,6 +12,7 @@ import { MerchantStore } from "../backend/src/store.js";
 import type { ServerEvent } from "../shared/types.js";
 import { registerTwilioRoutes } from "../twilio/src/routes.js";
 import { isTrustedControl, registerDemoRoutes } from "./demo.js";
+import { FleetMonitor } from "../backend/src/fleet.js";
 import { attachBrowserTransport } from "../voice/src/browser-transport.js";
 import { CallSession, type CallEvent } from "../voice/src/pipeline.js";
 import type { SpeechClient } from "../voice/src/speech.js";
@@ -27,6 +28,8 @@ export interface AppDeps {
   /** Per-call brain; defaults to `llm`. The offline mode uses this to pick the merchant's scripted scene. */
   llmFor?: (merchantId: string) => ChatClient;
   speech: SpeechClient;
+  /** Fleet tiles and scene state; created by buildApp if absent. */
+  monitor?: FleetMonitor;
   /** ms after a reminder before the mock customer pays; 0 disables. */
   simulatedPaymentDelayMs: number;
   whatsapp?: WhatsAppSender;
@@ -81,6 +84,7 @@ export function wireSimulations(deps: AppDeps): void {
 export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   // One shared object, so numbers changed from the dashboard reach every new call's tool context.
   deps.customerPhones ??= {};
+  deps.monitor ??= new FleetMonitor(deps.store, deps.clock, deps.bus);
   const app = Fastify({ logger: false });
   // Twilio delivers its voice and status webhooks as form POSTs. Without this parser
   // Fastify answers 415 before the route runs and the caller hears "check your URL".
@@ -104,6 +108,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   app.get("/", async (_req, reply) => reply.type("text/html").send(indexHtml()));
   app.get("/call", async (_req, reply) => reply.type("text/html").send(callHtml()));
   app.get("/dashboard", async (_req, reply) => reply.type("text/html").send(dashHtml()));
+  app.get("/fleet", async (_req, reply) => reply.type("text/html").send(readFileSync(path.join(ROOT, "dashboard", "public", "fleet.html"), "utf8")));
 
   // Polling twin of /events for clients behind proxies that buffer streams (tunnels, venue Wi-Fi).
   app.get<{ Params: { id: string }; Querystring: { since?: string } }>("/api/merchants/:id/events", async (req) => {

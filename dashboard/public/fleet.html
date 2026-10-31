@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Saathi · Fleet</title>
+<style>
+  :root { --navy:#0f2d6b; --navy-2:#1b3f8f; --cyan:#06b6d4; --ink:#0b1b3a; --muted:#5b6b8a; --bg:#eef3fa; --card:#fff; --line:#dfe6f2; --green:#16a34a; --amber:#d97706; --red:#dc2626; --purple:#7c3aed; }
+  * { box-sizing:border-box; }
+  html,body { margin:0; min-height:100%; }
+  body { background:var(--bg); color:var(--ink); font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans","Noto Sans Devanagari","Noto Sans Kannada",sans-serif; }
+  [hidden] { display:none !important; }
+  header { background:linear-gradient(90deg,var(--navy),var(--navy-2) 70%,#1d4ed8); color:#fff; padding:14px 32px; display:flex; align-items:center; gap:24px; flex-wrap:wrap; }
+  header .brand b { font-size:26px; font-weight:800; display:flex; align-items:center; gap:10px; }
+  header .brand b i { width:14px; height:14px; border-radius:50%; background:var(--cyan); display:inline-block; box-shadow:0 0 0 5px rgba(6,182,212,.25); }
+  header .brand span { font-size:15px; opacity:.9; }
+  header .spacer { flex:1; }
+  .pill { border-radius:999px; padding:8px 16px; font-size:15px; font-weight:600; background:rgba(255,255,255,.14); white-space:nowrap; }
+  header button, header a.btn { border:0; border-radius:12px; padding:11px 18px; font:inherit; font-size:15px; font-weight:800; cursor:pointer; color:#fff; background:#16a34a; text-decoration:none; }
+  header button.ghost, header a.btn.ghost { background:rgba(255,255,255,.16); }
+  header button:disabled { opacity:.55; cursor:not-allowed; }
+  .score { margin:18px 32px 0; background:var(--card); border-radius:22px; padding:16px 26px; display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); gap:18px; box-shadow:0 10px 36px rgba(15,45,107,.08); }
+  .stat { border-left:7px solid var(--navy); padding-left:16px; }
+  .stat.g { border-color:var(--green); } .stat.c { border-color:var(--cyan); } .stat.b { border-color:#1d4ed8; } .stat.s { border-color:#94a3b8; } .stat.r { border-color:var(--red); }
+  .stat .l { font-size:14px; letter-spacing:.14em; text-transform:uppercase; color:var(--muted); font-weight:800; }
+  .stat .v { font-size:46px; font-weight:800; line-height:1.05; font-variant-numeric:tabular-nums; }
+  .stat.bump .v { animation:bump .7s ease; }
+  @keyframes bump { 30%{transform:scale(1.07); color:var(--green)} }
+  .grid { margin:18px 32px 24px; display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:16px; }
+  .tile { background:var(--card); border-radius:20px; padding:14px 16px 12px; box-shadow:0 8px 26px rgba(15,45,107,.07); border-top:9px solid var(--green); cursor:pointer; display:flex; flex-direction:column; gap:7px; transition:transform .2s, box-shadow .2s, border-color .4s; min-width:0; }
+  .tile:hover { transform:translateY(-2px); box-shadow:0 14px 34px rgba(15,45,107,.14); }
+  .tile.red { border-top-color:var(--red); background:#fff7f7; animation:pulse 1.6s infinite; }
+  .tile.amber { border-top-color:var(--amber); background:#fffbeb; }
+  @keyframes pulse { 50% { box-shadow:0 0 0 6px rgba(220,38,38,.18); } }
+  .tile h3 { margin:0; font-size:20px; line-height:1.15; font-weight:800; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .tile .meta { color:var(--muted); font-size:14px; }
+  .dots { display:flex; gap:12px; font-size:14px; color:var(--muted); flex-wrap:wrap; }
+  .dot { display:inline-flex; align-items:center; gap:5px; white-space:nowrap; }
+  .dot i { width:11px; height:11px; border-radius:50%; background:var(--green); display:inline-block; }
+  .dot.bad i { background:var(--red); } .dot.warn i { background:var(--amber); }
+  .row { display:flex; justify-content:space-between; align-items:baseline; gap:8px; }
+  .take { font-size:24px; font-weight:800; font-variant-numeric:tabular-nums; }
+  .take small { font-size:12px; color:var(--muted); font-weight:600; display:block; letter-spacing:.06em; text-transform:uppercase; }
+  .band { font-size:12px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; padding:5px 9px; border-radius:8px; white-space:nowrap; }
+  .band.strong { background:#dcfce7; color:#166534; } .band.eligible { background:#dbeafe; color:#1e40af; } .band.watch { background:#fef3c7; color:#92400e; } .band.not-yet { background:#fee2e2; color:#991b1b; }
+  .roles { display:flex; gap:4px; flex-wrap:wrap; }
+  .roles span { font-size:10.5px; font-weight:800; letter-spacing:.05em; text-transform:uppercase; padding:4px 6px; border-radius:6px; background:#eef2f7; color:#94a3b8; transition:all .3s; }
+  .roles span.on { color:#fff; transform:scale(1.08); }
+  .roles span.on.Diagnoser { background:var(--purple); } .roles span.on.Fixer { background:var(--green); } .roles span.on.Seller { background:#1d4ed8; } .roles span.on.Compliance { background:var(--amber); } .roles span.on.Manager { background:#0f172a; }
+  .what { font-size:14.5px; line-height:1.3; min-height:38px; }
+  .trig { font-size:12.5px; color:var(--red); font-weight:700; min-height:16px; }
+  .tile.amber .trig { color:#92400e; } .tile.green .trig { color:var(--muted); font-weight:500; }
+  footer { margin:0 32px 18px; color:var(--muted); font-size:14px; display:flex; justify-content:space-between; gap:12px; }
+  #ctlMsg { font-size:14px; }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand"><b><i></i>Saathi · fleet</b><span>Autonomous service and sales teammate · resolves before a ticket exists · human approves the money step</span></div>
+  <span class="spacer"></span>
+  <span class="pill" id="clock">–</span>
+  <span id="ctlMsg"></span>
+  <button id="startScene" hidden>Start fleet scene</button>
+  <a class="btn ghost" href="/dashboard?merchant=m001">Ravi's dashboard</a>
+</header>
+<section class="score">
+  <div class="stat g" id="sRecovered"><div class="l">Recovered</div><div class="v">₹0</div></div>
+  <div class="stat c" id="sCollected"><div class="l">Collected</div><div class="v">₹0</div></div>
+  <div class="stat b" id="sOffered"><div class="l">Offered</div><div class="v">₹0</div></div>
+  <div class="stat s" id="sTickets"><div class="l">Tickets avoided</div><div class="v">0</div></div>
+  <div class="stat s" id="sWatched"><div class="l">Merchants watched</div><div class="v">0</div></div>
+  <div class="stat r" id="sLeaks"><div class="l">Open leaks</div><div class="v">0</div></div>
+</section>
+<section class="grid" id="grid"></section>
+<footer><span>This week, Monday to now. Each tile is one Paytm merchant; tap a tile to open its dashboard. Credit bands are computed by code from settlement, takings, ledger and device data; the model never computes them.</span><span id="conn">connecting…</span></footer>
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const inr = (n) => "₹" + Math.round(n).toLocaleString("en-IN");
+  const ROLES = ["Diagnoser", "Fixer", "Seller", "Compliance", "Manager"];
+  let fleetIds = new Set();
+  const live = {}; // merchantId -> { role, text } from the latest action
+  let demoKey = "";
+  try { demoKey = localStorage.getItem("saathiDemoKey") || ""; } catch {}
+  const shown = {};
+
+  function stat(id, value, fmt) {
+    const el = $(id), v = el.querySelector(".v");
+    if (shown[id] !== undefined && shown[id] !== value) { el.classList.remove("bump"); void el.offsetWidth; el.classList.add("bump"); }
+    shown[id] = value; v.textContent = fmt(value);
+  }
+
+  function render(snap) {
+    $("clock").textContent = snap.clockIst;
+    fleetIds = new Set(snap.tiles.map((t) => t.id));
+    const s = snap.scoreboard;
+    stat("sRecovered", s.recovered, inr); stat("sCollected", s.collected, inr); stat("sOffered", s.offered, inr);
+    stat("sTickets", s.ticketsAvoided, String); stat("sWatched", s.watched, String); stat("sLeaks", s.openLeaks, String);
+    $("startScene").disabled = snap.sceneRunning;
+    $("grid").innerHTML = snap.tiles.map((t) => {
+      const l = live[t.id] || {};
+      const role = t.role || l.role;
+      const text = t.role ? t.text : l.text || t.text;
+      return `<div class="tile ${t.status}" data-id="${t.id}">
+        <h3>${esc(t.shopName)}</h3>
+        <div class="meta">${esc(t.area)} · ${esc(t.language)}</div>
+        <div class="dots">
+          <span class="dot ${t.device === "silent" ? "bad" : ""}" title="${esc(t.deviceNote)}"><i></i>Soundbox</span>
+          <span class="dot ${t.settlement === "stuck" ? "bad" : ""}" title="${esc(t.settlementNote)}"><i></i>Settlement</span>
+          <span class="dot ${t.udhaarOldestDays > 10 ? "warn" : ""}"><i></i>Udhaar ${t.udhaarOldestDays} d</span>
+        </div>
+        <div class="row"><div class="take"><small>Today</small>${inr(t.todayTakings)}</div><span class="band ${t.credit.band.replace(" ", "-")}" title="credit signal ${t.credit.score}/100">${esc(t.credit.band)} · ${t.credit.score}</span></div>
+        <div class="roles">${ROLES.map((r) => `<span class="${r}${r === role ? " on" : ""}">${r}</span>`).join("")}</div>
+        <div class="what">${esc(text)}</div>
+        <div class="trig">${t.trigger ? "⚑ " + esc(t.trigger) : ""}</div>
+      </div>`;
+    }).join("");
+  }
+  $("grid").addEventListener("click", (e) => { const t = e.target.closest(".tile"); if (t) location.href = `/dashboard?merchant=${t.dataset.id}`; });
+
+  let pending = null;
+  function refresh() { if (pending) return; pending = setTimeout(() => { pending = null; fetch("/api/fleet").then((r) => r.json()).then(render).catch(() => {}); }, 200); }
+
+  let lastSeq = 0, streamAlive = false, pollTimer = null;
+  function handle(e) {
+    if (typeof e.seq === "number") { if (e.seq <= lastSeq) return; lastSeq = e.seq; }
+    const id = e.type === "action" ? e.entry.merchantId : e.type === "approval" ? e.approval.merchantId : e.merchantId;
+    if (fleetIds.size && !fleetIds.has(id)) return;
+    if (e.type === "action" && ["Diagnoser", "Fixer", "Seller", "Compliance", "Manager"].includes(e.entry.actor)) live[id] = { role: e.entry.actor, text: `${e.entry.actor}: ${e.entry.summary}` };
+    if (e.type === "reset") delete live[id];
+    if (["action", "fleet", "merchant", "counters", "reset", "call", "approval"].includes(e.type)) refresh();
+  }
+  function poll() { fetch(`/api/fleet/events?since=${lastSeq}`).then((r) => r.json()).then((d) => { for (const e of d.events) handle(e); if (!streamAlive) $("conn").textContent = "live (poll)"; }).catch(() => ($("conn").textContent = "reconnecting…")); }
+  function startPolling() { if (!pollTimer) { poll(); pollTimer = setInterval(poll, 1200); } }
+  function connect() {
+    fetch("/api/fleet").then((r) => r.json()).then((snap) => { render(snap); return fetch("/api/fleet/events?since=0"); }).then((r) => r.json()).then((d) => { lastSeq = d.next; }).catch(() => {});
+    const es = new EventSource("/events");
+    es.onopen = () => ($("conn").textContent = "live");
+    es.onerror = () => { $("conn").textContent = "reconnecting…"; startPolling(); };
+    es.onmessage = (ev) => { streamAlive = true; handle(JSON.parse(ev.data)); };
+    setTimeout(() => { if (!streamAlive) startPolling(); }, 3000);
+  }
+
+  // Demo control: same local-only / key guard as the dashboard strip.
+  fetch("/api/demo/config", { headers: demoKey ? { "X-Demo-Key": demoKey } : {} }).then((r) => r.json()).then((c) => { if (c.controls) $("startScene").hidden = false; }).catch(() => {});
+  $("startScene").addEventListener("click", async () => {
+    $("startScene").disabled = true; $("ctlMsg").textContent = "";
+    const r = await fetch("/api/demo/fleet-scene", { method: "POST", headers: { "Content-Type": "application/json", ...(demoKey ? { "X-Demo-Key": demoKey } : {}) }, body: "{}" });
+    if (!r.ok) { const j = await r.json().catch(() => ({})); $("ctlMsg").textContent = j.error || `HTTP ${r.status}`; $("startScene").disabled = false; }
+  });
+  connect();
+})();
+</script>
+</body>
+</html>
