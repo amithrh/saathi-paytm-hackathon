@@ -58,6 +58,35 @@
   .thread b { font-size:10.5px; letter-spacing:.05em; text-transform:uppercase; color:#fff; padding:2px 5px; border-radius:5px; margin-right:5px; background:#64748b; }
   .thread b.Diagnoser { background:var(--purple); } .thread b.Fixer { background:var(--green); } .thread b.Seller { background:#1d4ed8; } .thread b.Compliance { background:var(--amber); } .thread b.Manager { background:#0f172a; } .thread b.Human { background:#db2777; }
   .tile.follow { outline:4px solid #1d4ed8; outline-offset:3px; }
+  .lanes { margin:16px 32px 0; display:grid; grid-template-columns:repeat(5,minmax(0,1fr)) minmax(0,.7fr); gap:14px; }
+  .lane { background:var(--card); border-radius:20px; padding:14px 16px; box-shadow:0 8px 26px rgba(15,45,107,.07); border-top:8px solid #cbd5e1; display:flex; flex-direction:column; gap:6px; min-width:0; transition:box-shadow .3s, transform .3s; }
+  .lane .hd { display:flex; align-items:center; gap:8px; }
+  .lane .hd b { font-size:21px; font-weight:800; }
+  .lane .pill2 { margin-left:auto; font-size:11.5px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; padding:4px 9px; border-radius:999px; background:#eef2f7; color:#94a3b8; }
+  .lane .job { font-size:13.5px; color:var(--muted); }
+  .lane .cur { font-size:18px; font-weight:700; line-height:1.3; min-height:72px; }
+  .lane .cur.idle { color:#94a3b8; font-weight:600; }
+  .lane ul { list-style:none; margin:0; padding:6px 0 0; border-top:1px solid var(--line); display:flex; flex-direction:column; gap:3px; }
+  .lane li { font-size:12px; color:var(--muted); line-height:1.3; overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; }
+  .lane li i { font-style:normal; font-variant-numeric:tabular-nums; color:#94a3b8; margin-right:5px; }
+  .lane.Manager { border-top-color:#0f172a; } .lane.Diagnoser { border-top-color:var(--purple); } .lane.Fixer { border-top-color:var(--green); } .lane.Compliance { border-top-color:var(--amber); } .lane.Seller { border-top-color:#1d4ed8; } .lane.Human { border-top-color:#db2777; }
+  .lane.working { transform:translateY(-3px); box-shadow:0 16px 40px rgba(15,45,107,.18); }
+  .lane.working .pill2 { color:#fff; background:#16a34a; animation:blinkp 1s infinite; }
+  .lane.Human .cur { font-size:16px; }
+  @keyframes blinkp { 50% { opacity:.55; } }
+  .lane.got { animation:got 1s ease; }
+  @keyframes got { 0% { box-shadow:0 0 0 0 rgba(37,99,235,.6); } 100% { box-shadow:0 0 0 18px rgba(37,99,235,0); } }
+  .handoff { margin:10px 32px 0; min-height:30px; font-size:17px; font-weight:700; color:#1d4ed8; display:flex; align-items:center; gap:10px; }
+  .handoff .arr { font-size:22px; }
+  .handoff.flash { animation:fl 1.6s ease; }
+  @keyframes fl { 0% { opacity:0; transform:translateX(-12px); } 20% { opacity:1; transform:none; } }
+  .qhead { margin:14px 32px 0; font-size:14px; letter-spacing:.14em; text-transform:uppercase; color:var(--muted); font-weight:800; }
+  .grid { margin-top:8px !important; }
+  .tile { padding:10px 12px 10px !important; gap:5px !important; }
+  .tile h3 { font-size:16px !important; }
+  .tile .take { font-size:18px !important; }
+  .tile .roles { display:none; }
+  .tile .what { font-size:12.5px !important; min-height:0 !important; }
   footer { margin:0 32px 18px; color:var(--muted); font-size:14px; display:flex; justify-content:space-between; gap:12px; }
   #ctlMsg { font-size:14px; }
 </style>
@@ -85,6 +114,9 @@
   <div class="stat s" id="sWatched"><div class="l">Merchants watched</div><div class="v">0</div></div>
   <div class="stat r" id="sLeaks"><div class="l">Open leaks</div><div class="v">0</div></div>
 </section>
+<section class="lanes" id="lanes"></section>
+<div class="handoff" id="handoff"></div>
+<div class="qhead">Work queue · ten merchants the agents watch</div>
 <section class="grid" id="grid"></section>
 <footer><span>This week, Monday to now. Each tile is one Paytm merchant; tap a tile to open its dashboard. Credit bands are computed by code from settlement, takings, ledger and device data; the model never computes them.</span><span id="conn">connecting…</span></footer>
 <script>
@@ -114,6 +146,7 @@
   function render(snap) {
     $("clock").textContent = snap.clockIst;
     fleetIds = new Set(snap.tiles.map((t) => t.id));
+    tilesById = Object.fromEntries(snap.tiles.map((t) => [t.id, t]));
     const s = snap.scoreboard;
     stat("sRecovered", s.recovered, inr); stat("sCollected", s.collected, inr); stat("sOffered", s.offered, inr);
     stat("sTickets", s.ticketsAvoided, String); stat("sWatched", s.watched, String); stat("sLeaks", s.openLeaks, String);
@@ -153,6 +186,53 @@
     const t = e.target.closest(".tile"); if (t) location.href = `/dashboard?merchant=${t.dataset.id}`;
   });
 
+
+  // ---- agent lanes: every lane is driven by real bus events (fleet overlays for "doing now", actions for "done") ----
+  const LANES = [
+    { role: "Manager", job: "owns the queue, decides who acts, escalates to a call" },
+    { role: "Diagnoser", job: "finds the leak from settlement, device and ledger data" },
+    { role: "Fixer", job: "fixes it: restarts devices, retries settlements, sends reminders" },
+    { role: "Compliance", job: "checks every action against consent, TRAI and RBI rules" },
+    { role: "Seller", job: "matches a loan to a real cash need, never pushes" },
+    { role: "Human", job: "approves the money step" },
+  ];
+  const laneState = Object.fromEntries(LANES.map((l) => [l.role, { cur: "", at: 0, queue: [] }]));
+  let lastActor = null, lastActorMerchant = null, replaying = true;
+  const shopOf = (id) => (tilesById[id] && tilesById[id].shopName) || id;
+  let tilesById = {};
+  const hhmmss = () => new Date().toLocaleTimeString("en-IN", { hour12: false });
+  function renderLanes() {
+    const now = Date.now();
+    $("lanes").innerHTML = LANES.map((l) => {
+      const st = laneState[l.role];
+      const working = st.cur && now - st.at < 7000;
+      return `<div class="lane ${l.role}${working ? " working" : ""}" id="lane-${l.role}">
+        <div class="hd"><b>${l.role}</b><span class="pill2">${working ? "working" : "idle"}</span></div>
+        <div class="job">${esc(l.job)}</div>
+        <div class="cur${working ? "" : " idle"}">${working ? esc(st.cur) : st.queue.length ? "Waiting for the next hand-off" : "Idle"}</div>
+        <ul>${st.queue.slice(-4).reverse().map((q) => `<li><i>${q.t}</i>${esc(q.text)}</li>`).join("")}</ul>
+      </div>`;
+    }).join("");
+  }
+  setInterval(renderLanes, 1000);
+  function laneWork(role, merchantId, text, done) {
+    const st = laneState[role];
+    if (!st) return;
+    const line = `${text} · ${shopOf(merchantId)}`;
+    if (!done) { st.cur = line; st.at = Date.now(); }
+    else { st.queue.push({ t: hhmmss(), text: line }); if (st.queue.length > 12) st.queue.shift(); st.cur = st.cur || line; st.at = Math.max(st.at, Date.now() - 4000); }
+    if (!replaying && lastActor && lastActor !== role && lastActorMerchant === merchantId) {
+      const h = $("handoff");
+      h.innerHTML = `<b>${lastActor}</b><span class="arr">→</span><b>${role}</b><span style="color:var(--muted);font-weight:600">${esc(shopOf(merchantId))}</span>`;
+      h.classList.remove("flash"); void h.offsetWidth; h.classList.add("flash");
+      renderLanes();
+      const el = $(`lane-${role}`); if (el) { el.classList.remove("got"); void el.offsetWidth; el.classList.add("got"); }
+    }
+    lastActor = role; lastActorMerchant = merchantId;
+    renderLanes();
+  }
+  const stripRole = (t) => t.replace(/^(Manager|Diagnoser|Fixer|Compliance|Seller):\s*/, "");
+
   let pending = null;
   function refresh() { if (pending) return; pending = setTimeout(() => { pending = null; fetch("/api/fleet").then((r) => r.json()).then(render).catch(() => {}); }, 200); }
 
@@ -161,7 +241,10 @@
     if (typeof e.seq === "number") { if (e.seq <= lastSeq) return; lastSeq = e.seq; }
     const id = e.type === "action" ? e.entry.merchantId : e.type === "approval" ? e.approval.merchantId : e.merchantId;
     if (fleetIds.size && !fleetIds.has(id)) return;
+    if (e.type === "fleet" && e.role && e.status !== "green" && e.text) laneWork(e.role, id, stripRole(e.text), false);
+    if (e.type === "approval") laneWork("Human", id, e.approval.status === "pending" ? `Approval waiting: ${e.approval.action.replace(/_/g, " ")}${e.approval.amount ? " ₹" + e.approval.amount.toLocaleString("en-IN") : ""}` : `Approval ${e.approval.status}`, e.approval.status !== "pending");
     if (e.type === "action" && ["Diagnoser", "Fixer", "Seller", "Compliance", "Manager", "Human"].includes(e.entry.actor)) {
+      laneWork(e.entry.actor, id, e.entry.summary, true);
       if (e.entry.actor !== "Human") live[id] = { role: e.entry.actor, text: `${e.entry.actor}: ${e.entry.summary}` };
       if (!followId || id !== followId || (e.seq || 0) > followFrom) {
         const text = e.entry.summary.length > 92 ? e.entry.summary.slice(0, 90) + "…" : e.entry.summary;
@@ -179,7 +262,7 @@
   function poll() { fetch(`/api/fleet/events?since=${lastSeq}`).then((r) => r.json()).then((d) => { for (const e of d.events) handle(e); if (!streamAlive) $("conn").textContent = "live (poll)"; }).catch(() => ($("conn").textContent = "reconnecting…")); }
   function startPolling() { if (!pollTimer) { poll(); pollTimer = setInterval(poll, 1200); } }
   function connect() {
-    fetch("/api/fleet").then((r) => r.json()).then((snap) => { render(snap); return fetch("/api/fleet/events?since=0"); }).then((r) => r.json()).then((d) => { for (const e of d.events) handle(e); refresh(); }).catch(() => {});
+    fetch("/api/fleet").then((r) => r.json()).then((snap) => { render(snap); return fetch("/api/fleet/events?since=0"); }).then((r) => r.json()).then((d) => { for (const e of d.events) handle(e); replaying = false; refresh(); renderLanes(); }).catch(() => { replaying = false; });
     const es = new EventSource("/events");
     es.onopen = () => ($("conn").textContent = "live");
     es.onerror = () => { $("conn").textContent = "reconnecting…"; startPolling(); };
