@@ -129,6 +129,7 @@
   #leak { margin:14px 36px 0; padding:14px 22px; border-radius:16px; background:#dc2626; color:#fff; font-size:24px; font-weight:800; display:flex; align-items:center; gap:14px; animation:blink 1.2s infinite; }
   #leak small { font-size:15px; font-weight:600; opacity:.9; }
   #controls button.go { background:#16a34a; font-size:16px; padding:11px 20px; }
+  body.present #controls, body.present #leak { display:none !important; }
   #controls { background:#0b2352; color:#e2e8f0; padding:8px 36px; display:flex; flex-wrap:wrap; align-items:center; gap:10px 18px; font-size:14px; }
   #controls .grp { display:flex; align-items:center; gap:8px; }
   #controls .lab { font-size:12px; letter-spacing:.12em; text-transform:uppercase; color:#93c5fd; font-weight:800; }
@@ -241,6 +242,8 @@
   const $ = (id) => document.getElementById(id);
   const params = new URLSearchParams(location.search);
   const merchantId = params.get("merchant") || "m001";
+  // ?present=1: presentation mode for recordings and the projector, no demo-controls strip.
+  if (params.get("present") === "1") document.body.classList.add("present");
   const inr = (n) => "₹" + Math.round(n).toLocaleString("en-IN");
   const esc = (s) => String(s).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
   const timeOf = (iso) => new Date(iso).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false, timeZone: "Asia/Kolkata" });

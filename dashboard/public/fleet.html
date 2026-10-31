@@ -262,7 +262,7 @@
       }
       if (followId && id === followId && e.entry.tool === "dial" && (e.seq || 0) > followFrom) {
         const go = followId;
-        setTimeout(() => { location.href = `/dashboard?merchant=${encodeURIComponent(go)}`; }, followBack);
+        setTimeout(() => { location.href = `/dashboard?merchant=${encodeURIComponent(go)}${params.get("present") === "1" ? "&present=1" : ""}`; }, followBack);
       }
     }
     if (e.type === "approval") (threads[id] = threads[id] || []).push({ role: "Human", text: `approval ${e.approval.status}: ${e.approval.action.replace(/_/g, " ")}` });

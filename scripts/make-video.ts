@@ -32,8 +32,10 @@ mkdirSync(WORK, { recursive: true });
 
 // ---- server: live brain and voice, no phone, no WhatsApp, calm opening --------------------------------
 const server = spawn("npx", ["tsx", "server/main.ts"], {
+  // Twilio vars stay loaded (so the UI shows a configured phone path) but DEMO_DIAL=browser means no call is
+  // placed; the WhatsApp sender is blanked so the reminder renders as the mock bubble instead of a live send.
   env: { ...process.env, PORT: String(PORT), SAATHI_FAKE_NOW: "2026-10-31T10:15:00+05:30", DEMO_CONTROL_KEY: "test", DEMO_DIAL: "browser",
-    TWILIO_ACCOUNT_SID: "", TWILIO_AUTH_TOKEN: "", TWILIO_FROM_NUMBER: "", TWILIO_WHATSAPP_FROM: "", PUBLIC_BASE_URL: "", SIMULATED_PAYMENT_DELAY_MS: "12000" },
+    TWILIO_WHATSAPP_FROM: "", SIMULATED_PAYMENT_DELAY_MS: "12000" },
   stdio: ["ignore", "pipe", "pipe"],
 });
 server.stdout.on("data", (d) => process.env.VERBOSE && process.stdout.write(d));
@@ -58,10 +60,12 @@ await card(path.join(WORK, "end.png"), `<div style="font-size:84px;font-weight:8
 
 // ---- record ---------------------------------------------------------------------------------------------
 const ctx = await browser.newContext({ viewport: { width: W, height: H }, recordVideo: { dir: WORK, size: { width: W, height: H } } });
+// Fleet opens at the week baseline, not wherever an earlier run left it.
+await fetch(`${BASE}/api/demo/reset`, { method: "POST", headers: { "Content-Type": "application/json", "X-Demo-Key": "test" }, body: "{}" });
 const page: Page = await ctx.newPage();
 const t0 = Date.now();
 const at = () => Date.now() - t0;
-await page.goto(`${BASE}/fleet?key=test`);
+await page.goto(`${BASE}/fleet?key=test&present=1`);
 await page.waitForSelector("#startDemo:visible", { timeout: 15000 });
 await page.selectOption("#startWho", MERCHANT);
 await sleep(3000);
@@ -120,6 +124,12 @@ for (const [i, line] of JUDGE_LINES[lang as "hi-IN"].entries()) {
   ws.send(JSON.stringify({ type: "text", text: line }));
   seq++;
   await untilSpoken(seq);
+  if (i === 0) {
+    // The reminder just went out: bring the WhatsApp card (bottom of the right column) into view, then back.
+    await page.locator("#wa").scrollIntoViewIfNeeded().catch(() => undefined);
+    await sleep(3500);
+    await page.locator("#gates").scrollIntoViewIfNeeded().catch(() => undefined);
+  }
   if (i === 1) {
     // Loan accepted: the human approves, then hands to the lending partner.
     await page.waitForSelector("#approvals button[data-d=approved]", { timeout: 20_000 }).catch(() => undefined);
