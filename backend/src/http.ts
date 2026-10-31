@@ -3,6 +3,8 @@ import type { Clock } from "./clock.js";
 import type { EventBus } from "./events.js";
 import { MerchantStore, NotFoundError } from "./store.js";
 import { runToolByName, TOOLS } from "./tools.js";
+import { LLM_PROHIBITIONS, TRIGGER_RULES } from "./policy.js";
+import { CALLING_HOURS, COOLING_OFF_DAYS, HUMAN_APPROVAL_ABOVE } from "./compliance.js";
 import type { WhatsAppSender } from "../../whatsapp/src/client.js";
 
 export interface BackendDeps {
@@ -22,6 +24,29 @@ export async function registerBackendRoutes(app: FastifyInstance, deps: BackendD
   const { store, clock, bus, whatsapp, customerPhones } = deps;
 
   app.get("/api/health", async () => ({ ok: true, clockIst: store.snapshot("m001").clockIst, merchants: store.list().length }));
+
+  app.get("/api/policy", async () => ({
+    prohibitions: LLM_PROHIBITIONS,
+    triggers: TRIGGER_RULES,
+    callingWindowIst: `${CALLING_HOURS.start}:00-${CALLING_HOURS.end}:00`,
+    humanApprovalAbove: HUMAN_APPROVAL_ABOVE,
+    coolingOffDays: COOLING_OFF_DAYS,
+  }));
+
+  app.post<{ Params: { id: string } }>("/api/loans/:id/handoff", async (req, reply) => {
+    try {
+      const o = store.handoffLoan(req.params.id);
+      const m = store.list().find((x) => x.loanOffers.includes(o))!;
+      bus.publish({
+        type: "action",
+        entry: { id: `H-${o.id}`, at: clock.now().toISOString(), merchantId: m.id, actor: "Human", tool: "disburse", args: { offer_id: o.id }, ok: true, summary: `Human handed loan ${o.id} of Rs ${o.amount.toLocaleString("en-IN")} to ${o.lender}; no funds move in this demo`, source: "human button; the agent has no tool for this", ms: 0 },
+      });
+      return o;
+    } catch (e) {
+      if (e instanceof NotFoundError) return reply.code(404).send({ error: e.message });
+      return reply.code(409).send({ error: (e as Error).message });
+    }
+  });
 
   app.get("/api/tools", async () => TOOLS.map((t) => ({ name: t.name, role: t.role, description: t.description, parameters: t.parameters })));
 

@@ -91,7 +91,31 @@ export class MerchantStore {
       m.devices.flatMap((d) => d.events).filter((e) => e.kind === "restart" && e.unconfirmed).reduce((a, e) => a + (e.unconfirmed?.amount ?? 0), 0);
     const collected = m.udhaar.filter((u) => u.status === "paid" && u.remindedAt).reduce((a, u) => a + u.amount, 0);
     const offered = m.loanOffers.filter((o) => o.status !== "declined").reduce((a, o) => a + o.amount, 0);
-    return { recovered, collected, offered };
+    const ticketsAvoided =
+      m.devices.filter((d) => d.events.some((e) => e.kind === "restart" && e.unconfirmed)).length +
+      m.settlements.filter((s) => s.retriedAt && s.status === "settled").length;
+    return { recovered, collected, offered, ticketsAvoided };
+  }
+
+  /** Live counters plus the seeded week-to-date baseline: what the scoreboard shows. */
+  weekCounters(merchantId: string): Counters {
+    const live = this.counters(merchantId);
+    const w = this.get(merchantId).weekSoFar;
+    return { recovered: w.recovered + live.recovered, collected: w.collected + live.collected, offered: w.offered + live.offered, ticketsAvoided: w.ticketsAvoided + live.ticketsAvoided };
+  }
+
+  /** The human hands an approved offer to the lending partner. The agent has no path to this. */
+  handoffLoan(offerId: string): LoanOffer {
+    for (const m of this.merchants.values()) {
+      const o = m.loanOffers.find((x) => x.id === offerId);
+      if (o) {
+        if (o.status !== "approved") throw new Error(`offer ${offerId} is ${o.status}, not approved`);
+        o.status = "handed_to_lender";
+        this.changed(m.id);
+        return o;
+      }
+    }
+    throw new NotFoundError(`offer ${offerId}`);
   }
 
   approvalsFor(merchantId: string): ApprovalRequest[] {
@@ -109,7 +133,8 @@ export class MerchantStore {
       udhaar: m.udhaar,
       loanOffers: m.loanOffers,
       approvals: this.approvalsFor(merchantId),
-      counters: this.counters(merchantId),
+      counters: this.weekCounters(merchantId),
+      todayCounters: this.counters(merchantId),
       clockIst: `${istDate(now)} ${istTime(now)} IST`,
     };
   }

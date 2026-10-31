@@ -44,6 +44,14 @@ describe("get_briefing", async () => {
     expect(b.loan_hint).toMatchObject({ eligible: true, amount: 50000 });
     expect(b.loan_hint.reason).toMatch(/Diwali/);
     expect(b.suggested_actions).toEqual([{ tool: "restart_device", args: { device_id: "SB-7F42" }, why: expect.stringContaining("offline") }]);
+    expect(b.yesterday.source).toBe("50 settled payment lines dated 2026-10-30");
+    expect(b.triggers.map((t: any) => [t.rule, t.fired])).toEqual([
+      ["Device silent while inflows continue", true],
+      ["Settlement pending or failed past T+1", false],
+      ["Udhaar ledger line ageing", true],
+    ]);
+    expect(b.triggers[0].evidence).toMatch(/SB-7F42 silent since 18:02, \d+ payments landed since/);
+    expect(out.entry.source).toMatch(/50 settled payment lines .* trigger: SB-7F42 silent/);
     const logged = events.find((e) => e.type === "action");
     expect(logged && logged.type === "action" && logged.entry.actor).toBe("Diagnoser");
     expect(logged && logged.type === "action" && logged.entry.summary).toMatch(/Briefing: yesterday Rs 14,200; SB-7F42 offline; Suresh owes Rs 2,300 \(12 days\)/);
@@ -67,7 +75,10 @@ describe("restart_device and retry_settlement (Fixer)", async () => {
     expect(out.ok).toBe(true);
     expect(out.result).toMatchObject({ status: "online", confirmed_payments: 7, confirmed_amount: 1340 });
     expect(out.entry.actor).toBe("Fixer");
+    expect(out.entry.source).toBe("Soundbox SB-7F42 event log 18:02 to 10:15: 7 unannounced payment lines");
     expect(store.counters(RAVI_ID).recovered).toBe(1340);
+    expect(store.counters(RAVI_ID).ticketsAvoided).toBe(1);
+    expect(store.weekCounters(RAVI_ID)).toEqual({ recovered: 2110 + 1340, collected: 1500, offered: 0, ticketsAvoided: 3 });
     // A second restart does not double count.
     await runToolByName("restart_device", { device_id: "SB-7F42" }, ctx);
     expect(store.counters(RAVI_ID).recovered).toBe(1340);
@@ -111,7 +122,12 @@ describe("compliance gate on send_reminder", async () => {
     expect(out.ok).toBe(true);
     expect(out.result).toMatchObject({ channel: "whatsapp", to: "Suresh", amount: 2300 });
     expect((out.result as any).message).toMatch(/सुरेश|Suresh/);
-    expect((out.result as any).message).toContain("upi://pay");
+    expect((out.result as any).message).toContain("upi://pay?pa=ptm-jay-00117@paytm");
+    expect((out.result as any).message).toMatch(/&mc=5411&tr=SAATHICSURESH20261031&am=2300&cu=INR/);
+    expect((out.result as any).message).not.toMatch(/collect/i);
+    expect((out.result as any).link_type).toMatch(/^P2M pay intent/);
+    expect(out.entry.summary).toContain("P2M UPI link");
+    expect(out.entry.source).toBe("udhaar ledger line c-suresh: Rs 2,300 since 2026-10-19 (atta, oil, sugar, soap)");
     const wa = events.find((e) => e.type === "whatsapp");
     expect(wa && wa.type === "whatsapp" && wa.toName).toBe("Suresh");
     expect(store.get(RAVI_ID).udhaar.find((u) => u.customerId === "c-suresh")!.status).toBe("reminded");
@@ -157,8 +173,11 @@ describe("loan flow (Seller, Compliance, Manager)", async () => {
 
   it("offer_loan records the offer, raises human approval, ticks offered, and approval flips status", async () => {
     const { ctx, store, events } = setup();
-    const c = await runToolByName("compliance_check", { action: "offer_loan", merchant_consented: true }, ctx);
+    const c = await runToolByName("compliance_check", { action: "offer_loan", merchant_consented: true, amount: 50000 }, ctx);
     expect(c.ok).toBe(true);
+    const gates = (c.result as ComplianceResult).gates;
+    expect(gates.find((g) => g.key === "kfs")!.detail).toBe("₹50,000, 18% APR, 6 months, EMI ≈ ₹9,080");
+    expect(gates.at(-1)).toMatchObject({ key: "human_approval", status: "pending" });
     const out = await runToolByName("offer_loan", { amount: 50000, merchant_consented: true, compliance_ticket: (c.result as ComplianceResult).ticketId }, ctx);
     expect(out.ok).toBe(true);
     expect(out.result).toMatchObject({ status: "awaiting_human_approval", amount: 50000 });
@@ -168,8 +187,18 @@ describe("loan flow (Seller, Compliance, Manager)", async () => {
     expect(actors).toEqual(["Compliance", "Manager", "Seller"]);
     expect(store.counters(RAVI_ID).offered).toBe(50000);
     expect(store.approvalsFor(RAVI_ID)[0]!.status).toBe("pending");
+    expect(events.filter((e) => e.type === "action").map((e) => (e as any).entry.summary)).toContainEqual(expect.stringMatching(/^Escalated to human/));
+    expect(() => store.handoffLoan(store.get(RAVI_ID).loanOffers[0]!.id)).toThrow(/not approved/);
     store.decideApproval(approvalId, "approved");
     expect(store.get(RAVI_ID).loanOffers[0]!.status).toBe("approved");
+    store.handoffLoan(store.get(RAVI_ID).loanOffers[0]!.id);
+    expect(store.get(RAVI_ID).loanOffers[0]!.status).toBe("handed_to_lender");
+  });
+
+  it("compliance_check for a loan defaults the KFS to the eligible maximum and caps a larger ask", async () => {
+    const { ctx } = setup();
+    const c = await runToolByName("compliance_check", { action: "offer_loan", merchant_consented: true, amount: 90000 }, ctx);
+    expect((c.result as ComplianceResult).gates.find((g) => g.key === "kfs")!.detail).toMatch(/^₹50,000/);
   });
 
   it("the compliance_check for a loan refuses before consent", async () => {

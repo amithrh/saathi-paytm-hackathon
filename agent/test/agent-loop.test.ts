@@ -72,6 +72,26 @@ describe("SaathiAgent loop", () => {
     expect(llm.seen[1]![llm.seen[1]!.length - 1]).toEqual({ role: "user", content: CALL_CONNECTED_MARKER });
   });
 
+  it("audits spoken amounts against tool results and publishes the verdict", async () => {
+    const { agent, bus } = setup([
+      tools(call("1", "get_briefing", {})),
+      say("READY"),
+      say("कल 14200 रुपये आए, सुरेश का 2300 बाकी है।"),
+      say("किस्त 8900 रुपये बनेगी।"),
+    ]);
+    const audits: Array<{ ok: boolean; summary: string }> = [];
+    bus.subscribe((e) => {
+      if (e.type === "action" && e.entry.tool === "number_audit") audits.push({ ok: e.entry.ok, summary: e.entry.summary });
+    });
+    await agent.prepare();
+    const ok = await agent.open();
+    expect(ok.numberAudit).toEqual({ spoken: [14200, 2300], unbacked: [] });
+    const bad = await agent.respond("हाँ");
+    expect(bad.numberAudit.unbacked).toEqual([8900]);
+    expect(audits.map((a) => a.ok)).toEqual([true, false]);
+    expect(audits[1]!.summary).toBe("Spoken amount ₹8,900 has no backing tool result");
+  });
+
   it("marks the call ended when end_call runs and keeps the goodbye", async () => {
     const { agent } = setup([say("READY"), say("hi"), tools(call("x", "end_call", { reason: "done" })), say("नमस्ते, फिर मिलेंगे।")]);
     await agent.prepare();

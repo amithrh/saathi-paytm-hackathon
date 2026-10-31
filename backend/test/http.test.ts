@@ -47,5 +47,17 @@ describe("backend HTTP tool API", () => {
     expect(ok.json().status).toBe("approved");
     const missing = await app.inject({ method: "GET", url: "/api/merchants/nope/snapshot" });
     expect(missing.statusCode).toBe(404);
+    const offerId = snap.json().loanOffers[0].id as string;
+    const handoff = await app.inject({ method: "POST", url: `/api/loans/${offerId}/handoff` });
+    expect(handoff.statusCode).toBe(200);
+    expect(handoff.json().status).toBe("handed_to_lender");
+  });
+
+  it("publishes the policy the dashboard shows", async () => {
+    const res = await app.inject({ method: "GET", url: "/api/policy" });
+    const p = res.json();
+    expect(p.prohibitions.map((x: { rule: string }) => x.rule)).toContain("No arithmetic");
+    expect(p.triggers).toHaveLength(3);
+    expect(p.callingWindowIst).toBe("9:00-19:00");
   });
 });

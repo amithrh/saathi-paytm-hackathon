@@ -1,7 +1,8 @@
 import type { ActionLogEntry, Actor, ComplianceAction, ComplianceResult, Language, Role, WhatsAppDelivery } from "../../shared/types.js";
 import type { WhatsAppSender } from "../../whatsapp/src/client.js";
-import { daysBetween, istDate, istTime, type Clock } from "./clock.js";
-import { evaluateCompliance, HUMAN_APPROVAL_ABOVE, LENDER_NAME } from "./compliance.js";
+import { addDays, daysBetween, istDate, istTime, type Clock } from "./clock.js";
+import { COOLING_OFF_DAYS, evaluateCompliance, HUMAN_APPROVAL_ABOVE, LENDER_NAME, type Kfs } from "./compliance.js";
+import { DEVICE_SILENT_MINUTES, TRIGGER_RULES, UDHAAR_AGEING_DAYS } from "./policy.js";
 import type { EventBus } from "./events.js";
 import { MerchantStore, NotFoundError } from "./store.js";
 
@@ -32,6 +33,8 @@ export interface ToolDef {
   run(args: Record<string, unknown>, ctx: ToolContext): unknown | Promise<unknown>;
   /** English one-liner for the dashboard log, from args and result. */
   summarize(args: Record<string, unknown>, result: unknown, ctx: ToolContext): string;
+  /** The ledger lines behind the summary. */
+  source?(args: Record<string, unknown>, result: unknown, ctx: ToolContext): string;
 }
 
 export class ToolError extends Error {
@@ -115,6 +118,19 @@ export const getBriefing: ToolDef = {
       .map((u) => ({ customer_id: u.customerId, name: u.customerName, name_in_script: nameInScript(u.customerName, m.language), amount: u.amount, days_outstanding: daysBetween(u.since, today), status: u.status }))
       .sort((a, b) => b.amount - a.amount);
     const elig = loanEligibility(ctx);
+    const triggers = TRIGGER_RULES.map((r) => {
+      if (r.key === "device_silent") {
+        const silent = m.devices.filter((d) => d.status === "offline" && (now.getTime() - Date.parse(d.lastHeartbeat)) / 60_000 > DEVICE_SILENT_MINUTES);
+        const inflowsAfter = silent.length ? m.transactions.filter((t) => t.status === "success" && t.at > silent[0]!.lastHeartbeat && t.at <= now.toISOString()).length : 0;
+        return { rule: r.rule, threshold: r.threshold, fired: silent.length > 0 && inflowsAfter > 0, evidence: silent.length ? `${silent[0]!.id} silent since ${istTime(new Date(silent[0]!.lastHeartbeat))}, ${inflowsAfter} payments landed since` : "all devices heartbeating" };
+      }
+      if (r.key === "settlement_stuck") {
+        const stuck = m.settlements.filter((x) => x.status !== "settled");
+        return { rule: r.rule, threshold: r.threshold, fired: stuck.length > 0, evidence: stuck.length ? `${stuck[0]!.id} ${stuck[0]!.status} for ${inr(stuck[0]!.amount)} dated ${stuck[0]!.date}` : "all settlements credited" };
+      }
+      const aged = m.udhaar.filter((u) => u.status !== "paid" && daysBetween(u.since, today) > UDHAAR_AGEING_DAYS);
+      return { rule: r.rule, threshold: r.threshold, fired: aged.length > 0, evidence: aged.length ? `${aged.map((u) => `${u.customerName} ${daysBetween(u.since, today)} days`).join(", ")}` : "no line older than 10 days" };
+    });
     const suggested: Array<{ tool: string; args: Record<string, unknown>; why: string }> = [];
     for (const d of devices) if (d.issue) suggested.push({ tool: "restart_device", args: { device_id: d.device_id }, why: `${d.type} offline since ${d.issue.offline_since_ist}, ${d.issue.unconfirmed_payments} payments unconfirmed` });
     for (const s of failed) suggested.push({ tool: "retry_settlement", args: { settlement_id: s.settlement_id }, why: `settlement of ${inr(s.amount)} failed` });
@@ -122,7 +138,8 @@ export const getBriefing: ToolDef = {
       merchant: { name: m.ownerName, name_in_script: nameInScript(m.ownerName, m.language), shop: m.shopName, area: m.area, language: m.language },
       date: today,
       time_ist: istTime(now),
-      yesterday: { total: takings.yesterday, payments: takings.yesterdayCount, vs_same_day_last_week_pct: vsLastWeek },
+      yesterday: { total: takings.yesterday, payments: takings.yesterdayCount, vs_same_day_last_week_pct: vsLastWeek, source: `${takings.yesterdayCount} settled payment lines dated ${addDays(today, -1)}` },
+      triggers,
       today_so_far: { total: takings.today, payments: takings.todayCount },
       devices,
       failed_settlements: failed,
@@ -140,6 +157,10 @@ export const getBriefing: ToolDef = {
     if (b.udhaar_overdue[0]) parts.push(`${b.udhaar_overdue[0].name} owes ${inr(b.udhaar_overdue[0].amount)} (${b.udhaar_overdue[0].days_outstanding} days)`);
     return `Briefing: ${parts.join("; ")}`;
   },
+  source(_a, r) {
+    const b = r as { yesterday: { source: string }; triggers: Array<{ fired: boolean; evidence: string }> };
+    return [b.yesterday.source, ...b.triggers.filter((t) => t.fired).map((t) => `trigger: ${t.evidence}`)].join(" · ");
+  },
 };
 
 export const restartDevice: ToolDef = {
@@ -154,7 +175,13 @@ export const restartDevice: ToolDef = {
   },
   summarize(a, r) {
     const x = r as { confirmed_payments: number; confirmed_amount: number };
-    return x.confirmed_payments ? `Restarted ${a.device_id}: back online, ${x.confirmed_payments} payments worth ${inr(x.confirmed_amount)} confirmed` : `Restarted ${a.device_id}: online`;
+    return x.confirmed_payments ? `Restarted ${a.device_id}: back online, ${x.confirmed_payments} payments worth ${inr(x.confirmed_amount)} confirmed to the merchant` : `Restarted ${a.device_id}: online`;
+  },
+  source(a, r, ctx) {
+    const d = ctx.store.get(ctx.merchantId).devices.find((x) => x.id === a.device_id);
+    const off = d ? [...d.events].reverse().find((e) => e.kind === "offline") : undefined;
+    const x = r as { restarted_at_ist: string; confirmed_payments: number };
+    return off ? `Soundbox ${a.device_id} event log ${istTime(new Date(off.at))} to ${x.restarted_at_ist}: ${x.confirmed_payments} unannounced payment lines` : `device ${a.device_id} event log`;
   },
 };
 
@@ -171,6 +198,10 @@ export const retrySettlement: ToolDef = {
     const x = r as { amount: number };
     return `Retried settlement ${a.settlement_id}: ${inr(x.amount)} settled, UTR issued`;
   },
+  source(a, r) {
+    const x = r as { bank_ref?: string };
+    return `settlement record ${a.settlement_id}${x.bank_ref ? `, new ${x.bank_ref}` : ""}`;
+  },
 };
 
 export const complianceCheck: ToolDef = {
@@ -183,6 +214,7 @@ export const complianceCheck: ToolDef = {
       action: { type: "string", enum: ["service_call", "send_reminder", "offer_loan"], description: "The action you intend to take" },
       customer_id: { type: "string", description: "For send_reminder: the customer id from the briefing" },
       merchant_consented: { type: "boolean", description: "For offer_loan: true only if the merchant explicitly agreed on this call" },
+      amount: { type: "number", description: "For offer_loan: the rupee amount the merchant agreed to (defaults to the eligible maximum)" },
     },
     required: ["action"],
   },
@@ -192,7 +224,14 @@ export const complianceCheck: ToolDef = {
     const m = ctx.store.get(ctx.merchantId);
     const customerId = str(args, "customer_id", false);
     const consented = bool(args, "merchant_consented");
-    const result = evaluateCompliance({ merchant: m, action, now: ctx.clock.now(), ...(customerId ? { customerId } : {}), ...(consented !== undefined ? { merchantConsented: consented } : {}) });
+    let kfs: Kfs | undefined;
+    if (action === "offer_loan") {
+      const elig = loanEligibility(ctx);
+      const amount = args.amount === undefined || args.amount === null ? elig.max_amount : Math.min(num(args, "amount"), elig.max_amount);
+      const monthly = Math.round((amount * (1 + (elig.annual_rate_pct / 100) * (elig.tenure_months / 12))) / elig.tenure_months / 10) * 10;
+      kfs = { amount, annualRatePct: elig.annual_rate_pct, tenureMonths: elig.tenure_months, monthlyRepayment: monthly, totalRepayment: monthly * elig.tenure_months, processingFee: elig.processing_fee };
+    }
+    const result = evaluateCompliance({ merchant: m, action, now: ctx.clock.now(), ...(customerId ? { customerId } : {}), ...(consented !== undefined ? { merchantConsented: consented } : {}), ...(kfs ? { kfs } : {}) });
     if (!result.allowed) return result;
     const t = ctx.store.issueTicket(ctx.merchantId, action);
     return { ...result, ticketId: t.id, expiresAt: t.expiresAt };
@@ -203,6 +242,10 @@ export const complianceCheck: ToolDef = {
     return x.allowed
       ? `Compliance for ${a.action}: ${passed}/${x.checks.length} checks passed, ticket ${x.ticketId}`
       : `Compliance REFUSED ${a.action}: ${x.refusalReason}`;
+  },
+  source(_a, r) {
+    const x = r as ComplianceResult;
+    return x.checks.map((c) => c.ref).filter((v, i, arr) => arr.indexOf(v) === i).join(", ");
   },
 };
 
@@ -234,7 +277,9 @@ export const sendReminder: ToolDef = {
     const u = m.udhaar.find((x) => x.customerId === customerId);
     if (!u) throw new NotFoundError(`customer ${customerId}`);
     if (u.status === "paid") throw new ToolError("ALREADY_PAID", `${u.customerName} has already paid`);
-    const upiLink = `upi://pay?pa=${m.mid.toLowerCase()}@paytm&pn=${encodeURIComponent(m.shopName)}&am=${u.amount}&tn=Udhaar`;
+    // Verified-merchant P2M pay intent: merchant VPA, merchant category code, transaction reference. Never a P2P collect request.
+    const txnRef = `SAATHI${u.customerId.replace(/[^a-z0-9]/gi, "").toUpperCase().slice(0, 12)}${istDate(ctx.clock.now()).replace(/-/g, "")}`;
+    const upiLink = `upi://pay?pa=${m.mid.toLowerCase()}@paytm&pn=${encodeURIComponent(m.shopName)}&mc=5411&tr=${txnRef}&am=${u.amount}&cu=INR&tn=Udhaar`;
     const text = reminderText(m.language, m.shopName, m.ownerName, u.customerName, u.amount, upiLink);
     ctx.store.consumeTicket(ticket.id);
     const realPhone = ctx.customerPhones?.[customerId];
@@ -255,13 +300,18 @@ export const sendReminder: ToolDef = {
       to: u.customerName,
       amount: u.amount,
       message: text,
+      link_type: "P2M pay intent (verified merchant VPA, MCC 5411, txn ref); no P2P collect request",
       status: updated.status,
       delivery: delivery.mode === "live" ? `sent via ${delivery.provider}, message ${delivery.sid} (${delivery.status})` : delivery.mode === "failed" ? `live send failed (${delivery.error}); shown on dashboard only` : `mocked: ${delivery.note}`,
     };
   },
   summarize(_a, r) {
     const x = r as { to: string; amount: number; delivery: string };
-    return `WhatsApp reminder to ${x.to} for ${inr(x.amount)} with UPI link: ${x.delivery}`;
+    return `WhatsApp reminder to ${x.to} for ${inr(x.amount)} with P2M UPI link: ${x.delivery}`;
+  },
+  source(a, _r, ctx) {
+    const u = ctx.store.get(ctx.merchantId).udhaar.find((x) => x.customerId === a.customer_id);
+    return u ? `udhaar ledger line ${u.customerId}: ${inr(u.amount)} since ${u.since} (${u.items})` : "udhaar ledger";
   },
 };
 
@@ -324,6 +374,10 @@ export const checkLoanEligibility: ToolDef = {
     const x = r as ReturnType<typeof loanEligibility>;
     return x.eligible ? `Eligible for ${inr(x.max_amount)} at ${x.annual_rate_pct}% p.a. over ${x.tenure_months} months: ${x.reason_short}` : "Not eligible for a loan right now";
   },
+  source(_a, r) {
+    const x = r as ReturnType<typeof loanEligibility>;
+    return `30-day digital settled lines ${inr(x.monthly_digital_takings)} × 15% → ${inr(x.max_amount)}; last year Oct/Nov vs 12-month mean +${x.festive_lift_last_year_pct}%; score ${x.credit_score}`;
+  },
 };
 
 export const requestHumanApproval: ToolDef = {
@@ -347,7 +401,7 @@ export const requestHumanApproval: ToolDef = {
   },
   summarize(a, r) {
     const x = r as { approval_id: string };
-    return `Human approval requested (${x.approval_id}) for ${a.action}${a.amount ? ` of ${inr(Number(a.amount))}` : ""}: pending`;
+    return `Escalated to human: approval ${x.approval_id} for ${a.action}${a.amount ? ` of ${inr(Number(a.amount))}` : ""} is pending`;
   },
 };
 
@@ -397,6 +451,9 @@ export const offerLoan: ToolDef = {
     const x = r as { amount: number; status: string; approval_id: string | null };
     return `Loan of ${inr(x.amount)} accepted by merchant, status ${x.status.replace(/_/g, " ")}${x.approval_id ? ` (${x.approval_id})` : ""}`;
   },
+  source(_a, _r, ctx) {
+    return `consent recorded ${istTime(ctx.clock.now())} IST on this call; eligibility and compliance ticket consumed; cooling-off ${COOLING_OFF_DAYS} day`;
+  },
 };
 
 export const endCall: ToolDef = {
@@ -432,9 +489,15 @@ export async function runTool(tool: ToolDef, args: Record<string, unknown>, ctx:
   let result: unknown;
   let ok = true;
   let summary: string;
+  let source: string | undefined;
   try {
     result = await tool.run(args, ctx);
     summary = tool.summarize(args, result, ctx);
+    try {
+      source = tool.source?.(args, result, ctx);
+    } catch {
+      source = undefined;
+    }
     if (tool.name === "compliance_check" && !(result as ComplianceResult).allowed) ok = false;
     if (result && typeof result === "object" && (result as { ok?: unknown }).ok === false) ok = false;
   } catch (err) {
@@ -453,6 +516,7 @@ export async function runTool(tool: ToolDef, args: Record<string, unknown>, ctx:
     args,
     ok,
     summary,
+    ...(source ? { source } : {}),
     result,
     ms: Date.now() - started,
   };

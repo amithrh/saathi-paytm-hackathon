@@ -3,6 +3,7 @@ import type { EventBus } from "../../backend/src/events.js";
 import type { MerchantStore } from "../../backend/src/store.js";
 import { runToolByName, TOOLS, type ToolContext } from "../../backend/src/tools.js";
 import type { ActionLogEntry } from "../../shared/types.js";
+import { auditSpokenNumbers, numbersInResult, type NumberAudit } from "./numbers.js";
 import type { ChatClient, ChatMessage, ToolSpec } from "./llm.js";
 import { CALL_CONNECTED_MARKER, PRE_CALL_MARKER, systemPrompt } from "./prompt.js";
 
@@ -30,6 +31,8 @@ export interface AgentTurn {
   llmMs: number;
   llmCalls: number;
   toolsMs: number;
+  /** Spoken amounts checked against every tool result seen on this call. */
+  numberAudit: NumberAudit;
 }
 
 /**
@@ -42,6 +45,9 @@ export class SaathiAgent {
   private readonly ctx: ToolContext;
   private readonly maxRounds: number;
   private ended = false;
+  /** Every number any tool has returned on this call. */
+  private readonly backing = new Set<number>();
+  private auditSeq = 0;
 
   constructor(private readonly deps: AgentDeps) {
     const merchant = deps.store.get(deps.merchantId);
@@ -73,7 +79,7 @@ export class SaathiAgent {
 
   private async turn(userText: string): Promise<AgentTurn> {
     this.messages.push({ role: "user", content: userText });
-    const turn: AgentTurn = { speech: "", endCall: false, toolCalls: [], llmMs: 0, llmCalls: 0, toolsMs: 0 };
+    const turn: AgentTurn = { speech: "", endCall: false, toolCalls: [], llmMs: 0, llmCalls: 0, toolsMs: 0, numberAudit: { spoken: [], unbacked: [] } };
     for (let round = 0; round <= this.maxRounds; round++) {
       const res = await this.deps.llm.complete(this.messages, this.toolSpecs);
       turn.llmMs += res.ms;
@@ -90,6 +96,7 @@ export class SaathiAgent {
         const out = await runToolByName(call.name, call.args, this.ctx);
         turn.toolsMs += Date.now() - started;
         turn.toolCalls.push(out.entry);
+        numbersInResult(out.result, this.backing);
         this.deps.log?.(`[${out.entry.actor}] ${call.name}(${JSON.stringify(call.args)}) -> ${out.ok ? "ok" : "FAILED"} ${out.entry.summary}`);
         if (call.name === "end_call" && out.ok) {
           turn.endCall = true;
@@ -103,7 +110,35 @@ export class SaathiAgent {
       }
     }
     turn.speech = cleanSpeech(turn.speech);
+    if (turn.speech) {
+      turn.numberAudit = auditSpokenNumbers(turn.speech, this.backing);
+      this.publishAudit(turn.numberAudit);
+    }
     return turn;
+  }
+
+  private publishAudit(a: NumberAudit): void {
+    if (!a.spoken.length) return;
+    const fmt = (n: number) => `₹${n.toLocaleString("en-IN")}`;
+    this.deps.bus?.publish({
+      type: "action",
+      entry: {
+        id: `N-${this.deps.callId}-${++this.auditSeq}`,
+        at: this.deps.clock.now().toISOString(),
+        merchantId: this.deps.merchantId,
+        callId: this.deps.callId,
+        actor: "System",
+        tool: "number_audit",
+        args: { spoken: a.spoken },
+        ok: a.unbacked.length === 0,
+        summary: a.unbacked.length
+          ? `Spoken amount${a.unbacked.length > 1 ? "s" : ""} ${a.unbacked.map(fmt).join(", ")} ha${a.unbacked.length > 1 ? "ve" : "s"} no backing tool result`
+          : `Every spoken amount (${a.spoken.map(fmt).join(", ")}) is backed by a tool result`,
+        source: "numbers collected from every tool result on this call; the model only phrases them",
+        ms: 0,
+      },
+    });
+    if (a.unbacked.length) this.deps.log?.(`NUMBER AUDIT: unbacked ${a.unbacked.join(", ")}`);
   }
 }
 

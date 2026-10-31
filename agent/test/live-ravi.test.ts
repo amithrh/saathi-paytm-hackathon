@@ -48,7 +48,7 @@ run("live Ravi conversation (Hindi)", () => {
     expect(opening).toMatch(/14200/);
     expect(opening).toMatch(/[ऀ-ॿ]/);
     expect(opening).toMatch(/2300/);
-    expect(store.counters(RAVI_ID)).toEqual({ recovered: 1340, collected: 0, offered: 50000 });
+    expect(store.counters(RAVI_ID)).toEqual({ recovered: 1340, collected: 0, offered: 50000, ticketsAvoided: 1 });
     expect(store.get(RAVI_ID).loanOffers[0]!.status).toBe("awaiting_human_approval");
     const maxLlm = Math.max(...turns.map((t) => t.llmMs));
     console.log(`Ravi live: LLM ms per turn ${turns.map((t) => t.llmMs).join(", ")}; max ${maxLlm}`);

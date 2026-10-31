@@ -1,4 +1,4 @@
-import type { Consent, Device, Language, Merchant, SeasonalMonth, Settlement, Transaction, TxnChannel, UdhaarEntry } from "../../shared/types.js";
+import type { Consent, Counters, Device, Language, Merchant, SeasonalMonth, Settlement, Transaction, TxnChannel, UdhaarEntry } from "../../shared/types.js";
 import { addDays, istInstant } from "./clock.js";
 import { Rng } from "./rng.js";
 
@@ -148,7 +148,7 @@ function buildRavi(rng: Rng, today: string): Merchant {
     dndRegistered: false,
     devices: [
       soundbox("SB-7F42", "offline", offlineSince, [
-        { at: offlineSince, kind: "offline", note: "Heartbeat lost at 18:02 IST; 4G signal drop", unconfirmed: { count: 7, amount: 1340 } },
+        { at: offlineSince, kind: "offline", note: "Silent since 18:02 IST (4G drop). 7 payments landed in the app unannounced; customers heard nothing and may have thought the payment failed", unconfirmed: { count: 7, amount: 1340 } },
       ]),
       qr("QR-2210", istInstant(today, 7, 55).toISOString()),
     ],
@@ -158,6 +158,7 @@ function buildRavi(rng: Rng, today: string): Merchant {
     seasonalLastYear: genSeasonal(rng, 320000, 0.42, Number(today.slice(0, 4)) - 1),
     loanProfile: { creditScore: 742, existingLoan: false, monthsOnPaytm: 38 },
     loanOffers: [],
+    weekSoFar: { recovered: 2110, collected: 1500, offered: 0, ticketsAvoided: 2 },
   };
 }
 
@@ -191,6 +192,7 @@ function buildLakshmi(rng: Rng, today: string): Merchant {
     seasonalLastYear: genSeasonal(rng, 265000, 0.35, Number(today.slice(0, 4)) - 1),
     loanProfile: { creditScore: 731, existingLoan: false, monthsOnPaytm: 29 },
     loanOffers: [],
+    weekSoFar: { recovered: 0, collected: 800, offered: 0, ticketsAvoided: 1 },
   };
 }
 
@@ -244,6 +246,7 @@ function buildOther(rng: Rng, idx: number, today: string): Merchant {
     seasonalLastYear: genSeasonal(rng, rng.int(80, 500) * 1000, rng.next() * 0.5, Number(today.slice(0, 4)) - 1),
     loanProfile: { creditScore: rng.int(600, 800), existingLoan: rng.chance(0.3), monthsOnPaytm: rng.int(3, 60) },
     loanOffers: [],
+    weekSoFar: { recovered: rng.int(0, 60) * 50, collected: rng.int(0, 40) * 50, offered: 0, ticketsAvoided: rng.int(0, 3) } as Counters,
   };
 }
 

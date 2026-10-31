@@ -89,7 +89,7 @@ export interface LoanProfile {
   monthsOnPaytm: number;
 }
 
-export type LoanOfferStatus = "offered" | "awaiting_human_approval" | "approved" | "declined";
+export type LoanOfferStatus = "offered" | "awaiting_human_approval" | "approved" | "declined" | "handed_to_lender";
 
 export interface LoanOffer {
   id: string;
@@ -135,6 +135,8 @@ export interface Merchant {
   transactions: Transaction[];
   /** Same months, last year. Used for the seasonal (Diwali) loan reasoning. */
   seasonalLastYear: SeasonalMonth[];
+  /** Monday to yesterday of the current week, so the scoreboard opens with a week-to-date figure. */
+  weekSoFar: Counters;
   loanProfile: LoanProfile;
   loanOffers: LoanOffer[];
 }
@@ -146,6 +148,8 @@ export interface Counters {
   collected: number;
   /** Rupees of working capital offered. */
   offered: number;
+  /** Support tickets the merchant never had to raise: each leak fixed before a call to the helpline. */
+  ticketsAvoided: number;
 }
 
 export interface ActionLogEntry {
@@ -159,6 +163,8 @@ export interface ActionLogEntry {
   ok: boolean;
   /** One human-readable English line for the dashboard. */
   summary: string;
+  /** The ledger lines or records behind the summary, e.g. "Soundbox SB-7F42 event log 18:02 to 10:15". */
+  source?: string;
   result?: unknown;
   ms: number;
 }
@@ -177,11 +183,20 @@ export interface ComplianceCheckLine {
 
 export type ComplianceAction = "service_call" | "send_reminder" | "offer_loan";
 
+/** One line of the on-screen compliance panel. */
+export interface ComplianceGate {
+  key: string;
+  label: string;
+  status: "pass" | "fail" | "pending";
+  detail: string;
+}
+
 export interface ComplianceResult {
   action: ComplianceAction;
   allowed: boolean;
   ticketId?: string;
   checks: ComplianceCheckLine[];
+  gates: ComplianceGate[];
   refusalReason?: string;
   checkedAt: string;
   expiresAt?: string;
@@ -219,6 +234,9 @@ export interface MerchantSnapshot {
   udhaar: UdhaarEntry[];
   loanOffers: LoanOffer[];
   approvals: ApprovalRequest[];
+  /** Week to date, what the scoreboard shows. */
   counters: Counters;
+  /** This session only. */
+  todayCounters: Counters;
   clockIst: string;
 }
