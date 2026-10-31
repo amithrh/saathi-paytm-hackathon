@@ -21,7 +21,9 @@ export interface PlaceCallInput {
 
 /** Create an outbound call through Twilio's REST API. No SDK; one form POST. */
 export async function placeCall(creds: TwilioCredentials, input: PlaceCallInput, fetchImpl: typeof fetch = fetch): Promise<{ callSid: string; status: string }> {
-  const body = new URLSearchParams({ To: input.to, From: creds.fromNumber, Url: input.voiceUrl, Method: "POST" });
+  // Only To, From and Url: Twilio's current trial tier rejects any other parameter
+  // ("trial accounts have limited parameter access"). The voice webhook accepts GET.
+  const body = new URLSearchParams({ To: input.to, From: creds.fromNumber, Url: input.voiceUrl });
   if (input.statusCallbackUrl) body.set("StatusCallback", input.statusCallbackUrl);
   const res = await fetchImpl(`https://api.twilio.com/2010-04-01/Accounts/${encodeURIComponent(creds.accountSid)}/Calls.json`, {
     method: "POST",
