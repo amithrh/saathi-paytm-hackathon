@@ -113,7 +113,7 @@ export async function bringSoundboxDown(d: BringDownDeps): Promise<BringDownOutc
     // Reset pressed while the call was being prepared: do not repaint the freshly reset tile.
     if (store.generation !== gen) return { unannounced: { count: 0, amount: 0 }, escalated: false, dial };
     if (dial.ok) {
-      note("Manager", "dial", `Calling ${first} now (Twilio ${dial.status})`, `call ${dial.callSid}`);
+      note("Manager", "dial", dial.callSid === "browser" ? `Calling ${first} now on the laptop call screen` : `Calling ${first} now (Twilio ${dial.status})`, `call ${dial.callSid}`);
       monitor.set(id, { status: "amber", role: "Manager", trigger, text: `Manager: calling ${first} · phone ringing` });
     } else {
       bus.publish({ type: "action", entry: { id: `B-${id}-dial-${Date.now()}`, at: clock.now().toISOString(), merchantId: id, actor: "Manager", tool: "dial", args: {}, ok: false, summary: `Phone call failed: ${dial.error}. Use the laptop call screen`, ms: 0 } });

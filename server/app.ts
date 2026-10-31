@@ -115,6 +115,8 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
 
   await registerBackendRoutes(app, { store: deps.store, clock: deps.clock, bus: deps.bus, ...(deps.whatsapp ? { whatsapp: deps.whatsapp } : {}), ...(deps.customerPhones ? { customerPhones: deps.customerPhones } : {}) });
   const twilio = await registerTwilioRoutes(app, { authorize: (req) => isTrustedControl(req, process.env), makeSession: makeSessionFactory(deps, "phone"), ...(deps.publicBaseUrl ? { publicBaseUrl: deps.publicBaseUrl } : {}), ...(deps.log ? { log: deps.log } : {}) });
+  // DEMO_DIAL=browser: no phone call; the Manager hands off to the laptop call screen (recordings, no-Twilio rooms).
+  if (process.env.DEMO_DIAL === "browser") deps.dialer ??= async () => ({ ok: true, callSid: "browser", status: "laptop call screen" });
   deps.dialer ??= async (merchantId, to) => {
     const r = await twilio.dial(merchantId, to);
     return r.ok ? { ok: true, callSid: r.callSid, status: r.status } : { ok: false, error: r.error };
