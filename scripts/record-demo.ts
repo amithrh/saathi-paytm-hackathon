@@ -19,6 +19,7 @@ import WebSocket from "ws";
 import { JUDGE_LINES } from "../agent/src/script.js";
 import type { Language, MerchantSnapshot, TurnLatency } from "../shared/types.js";
 import { concatInt16, pcm16ToWav, resample, wavToPcm16 } from "../voice/src/audio.js";
+import { CachedSpeechClient } from "../voice/src/cached-speech.js";
 import { SarvamSpeechClient } from "../voice/src/speech.js";
 
 const args = process.argv.slice(2);
@@ -46,11 +47,8 @@ const lang: Language = before.merchant.language;
 const lines = JUDGE_LINES[lang];
 log(`merchant ${before.merchant.shopName} (${lang}), clock ${before.clockIst}, mode ${voiceMode ? "voice" : "text"}, play ${play}`);
 
-const speech = voiceMode ? new SarvamSpeechClient({ apiKey: process.env.SARVAM_API_KEY ?? "", speaker: "amit" }) : undefined;
-if (voiceMode && !process.env.SARVAM_API_KEY) {
-  console.error("--voice needs SARVAM_API_KEY in .env");
-  process.exit(2);
-}
+const apiKey = process.env.SARVAM_API_KEY?.trim();
+const speech = voiceMode ? new CachedSpeechClient(apiKey ? new SarvamSpeechClient({ apiKey, speaker: "amit" }) : undefined, { speaker: "amit" }) : undefined;
 
 mkdirSync(outDir, { recursive: true });
 const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);

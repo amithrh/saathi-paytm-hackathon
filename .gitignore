@@ -1,5 +1,6 @@
 .env
 node_modules/
 dist/
-recordings/
+recordings/*
+!recordings/cache/
 *.log

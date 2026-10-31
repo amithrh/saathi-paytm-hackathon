@@ -50,6 +50,9 @@ run("live Ravi conversation (Hindi)", () => {
     expect(opening).toMatch(/2300/);
     expect(store.counters(RAVI_ID)).toEqual({ recovered: 1340, collected: 0, offered: 50000, ticketsAvoided: 1 });
     expect(store.get(RAVI_ID).loanOffers[0]!.status).toBe("awaiting_human_approval");
+    // Every rupee figure Saathi spoke must come from a tool result (no model arithmetic).
+    for (const t of turns) expect(t.numberAudit.unbacked).toEqual([]);
+    expect(turns[1]!.numberAudit.spoken).toEqual(expect.arrayContaining([14200, 1340, 2300]));
     const maxLlm = Math.max(...turns.map((t) => t.llmMs));
     console.log(`Ravi live: LLM ms per turn ${turns.map((t) => t.llmMs).join(", ")}; max ${maxLlm}`);
     expect(maxLlm).toBeLessThan(15000);
@@ -64,5 +67,6 @@ run("live Lakshmi conversation (Kannada)", () => {
     expect(turns[1]!.speech).toMatch(/11650/);
     expect(calls.indexOf("compliance_check")).toBeLessThan(calls.indexOf("send_reminder"));
     expect(store.counters(LAKSHMI_ID).recovered).toBe(8450);
+    for (const t of turns) expect(t.numberAudit.unbacked).toEqual([]);
   }, 90_000);
 });

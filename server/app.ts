@@ -23,6 +23,8 @@ export interface AppDeps {
   store: MerchantStore;
   bus: EventBus;
   llm: ChatClient;
+  /** Per-call brain; defaults to `llm`. The offline mode uses this to pick the merchant's scripted scene. */
+  llmFor?: (merchantId: string) => ChatClient;
   speech: SpeechClient;
   /** ms after a reminder before the mock customer pays; 0 disables. */
   simulatedPaymentDelayMs: number;
@@ -34,7 +36,7 @@ export interface AppDeps {
 
 export function makeSessionFactory(deps: AppDeps, transport: string) {
   return (merchantId: string, onEvent: (e: CallEvent) => void): CallSession =>
-    new CallSession({ merchantId, store: deps.store, clock: deps.clock, llm: deps.llm, speech: deps.speech, bus: deps.bus, transport, onEvent, ...(deps.whatsapp ? { whatsapp: deps.whatsapp } : {}), ...(deps.customerPhones ? { customerPhones: deps.customerPhones } : {}), ...(deps.log ? { log: deps.log } : {}) });
+    new CallSession({ merchantId, store: deps.store, clock: deps.clock, llm: deps.llmFor ? deps.llmFor(merchantId) : deps.llm, speech: deps.speech, bus: deps.bus, transport, onEvent, ...(deps.whatsapp ? { whatsapp: deps.whatsapp } : {}), ...(deps.customerPhones ? { customerPhones: deps.customerPhones } : {}), ...(deps.log ? { log: deps.log } : {}) });
 }
 
 /** Wires the mock customer who pays after a reminder, and snapshot/counter pushes on store changes. */
