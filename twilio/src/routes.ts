@@ -31,7 +31,12 @@ interface Prepared {
  * Twilio transport: prepare the session before dialling so the briefing is ready when the
  * merchant answers; the <Stream> carries a token that the media WebSocket uses to find it.
  */
-export async function registerTwilioRoutes(app: FastifyInstance, deps: TwilioRouteDeps): Promise<void> {
+export interface TwilioRoutes {
+  /** Prepare a session and ring the merchant; the same path POST /twilio/call uses. */
+  dial(merchantId: string, to?: string): Promise<{ ok: true; callSid: string; status: string; token: string } | { ok: false; error: string; code: number }>;
+}
+
+export async function registerTwilioRoutes(app: FastifyInstance, deps: TwilioRouteDeps): Promise<TwilioRoutes> {
   const env = deps.env ?? process.env;
   const prepared = new Map<string, Prepared>();
 
@@ -165,15 +170,13 @@ export async function registerTwilioRoutes(app: FastifyInstance, deps: TwilioRou
   });
 
   /** Place the outbound call. Body: { merchantId?, to? }. Needs creds and PUBLIC_BASE_URL (ngrok). */
-  app.post<{ Body: { merchantId?: string; to?: string } }>("/twilio/call", async (req, reply) => {
-    if (deps.authorize && !deps.authorize(req)) return reply.code(403).send({ error: "demo controls are local-only; open the dashboard on the laptop or add ?key=<DEMO_CONTROL_KEY>" });
+  async function dial(merchantId: string, toRaw?: string): Promise<Awaited<ReturnType<TwilioRoutes["dial"]>>> {
     const creds = twilioCredentialsFromEnv(env);
-    if (!creds) return reply.code(503).send({ error: "Twilio credentials missing in .env (TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_FROM_NUMBER)" });
-    if (!deps.publicBaseUrl) return reply.code(503).send({ error: "PUBLIC_BASE_URL is not set; Twilio must reach this server over HTTPS (ngrok http 3000)" });
-    const to = (req.body?.to ?? env.DEMO_PHONE_NUMBER ?? "").replace(/[\s()-]/g, "");
-    if (!to) return reply.code(400).send({ error: "no phone number: pass `to` or set DEMO_PHONE_NUMBER" });
-    if (!/^\+\d{8,15}$/.test(to)) return reply.code(400).send({ error: `not an international number: ${to} (use +91...)` });
-    const merchantId = req.body?.merchantId ?? "m001";
+    if (!creds) return { ok: false, code: 503, error: "Twilio credentials missing in .env (TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_FROM_NUMBER)" };
+    if (!deps.publicBaseUrl) return { ok: false, code: 503, error: "PUBLIC_BASE_URL is not set; Twilio must reach this server over HTTPS" };
+    const to = (toRaw ?? env.DEMO_PHONE_NUMBER ?? "").replace(/[\s()-]/g, "");
+    if (!to) return { ok: false, code: 400, error: "no phone number: pass `to` or set DEMO_PHONE_NUMBER" };
+    if (!/^\+\d{8,15}$/.test(to)) return { ok: false, code: 400, error: `not an international number: ${to} (use +91...)` };
     const token = randomUUID();
     const p = prepare(merchantId);
     prepared.set(token, p);
@@ -181,7 +184,7 @@ export async function registerTwilioRoutes(app: FastifyInstance, deps: TwilioRou
       await p.session.prepare();
     } catch (e) {
       prepared.delete(token);
-      return reply.code(500).send({ error: `prepare failed: ${(e as Error).message}` });
+      return { ok: false, code: 500, error: `prepare failed: ${(e as Error).message}` };
     }
     const voiceUrl = `${deps.publicBaseUrl.replace(/\/$/, "")}/twilio/voice?token=${token}`;
     try {
@@ -191,8 +194,16 @@ export async function registerTwilioRoutes(app: FastifyInstance, deps: TwilioRou
     } catch (e) {
       prepared.delete(token);
       p.session.hangup("dial failed");
-      return reply.code(502).send({ error: (e as Error).message });
+      return { ok: false, code: 502, error: (e as Error).message };
     }
+  }
+
+  /** Place the outbound call. Body: { merchantId?, to? }. Needs creds and PUBLIC_BASE_URL. */
+  app.post<{ Body: { merchantId?: string; to?: string } }>("/twilio/call", async (req, reply) => {
+    if (deps.authorize && !deps.authorize(req)) return reply.code(403).send({ error: "demo controls are local-only; open the dashboard on the laptop or add ?key=<DEMO_CONTROL_KEY>" });
+    const r = await dial(req.body?.merchantId ?? "m001", req.body?.to);
+    if (!r.ok) return reply.code(r.code).send({ error: r.error });
+    return { ok: true, callSid: r.callSid, status: r.status, token: r.token };
   });
 
   /** TwiML webhook. With a token: an outbound call we prepared. Without: an inbound call to the demo merchant. */
@@ -234,4 +245,5 @@ export async function registerTwilioRoutes(app: FastifyInstance, deps: TwilioRou
       },
     });
   });
+  return { dial };
 }

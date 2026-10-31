@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import type { AppDeps } from "./app.js";
 import { runFleetScene } from "../backend/src/fleet.js";
+import { bringDownRunning, bringSoundboxDown } from "../backend/src/bringdown.js";
 
 /** Which customer gets the live reminder in each demo scene. */
 export const SCENE_CUSTOMER: Record<string, { customerId: string; name: string; envKey: string }> = {
@@ -101,6 +102,34 @@ export async function registerDemoRoutes(app: FastifyInstance, deps: AppDeps, en
       ...(deps.log ? { log: deps.log } : {}),
     }).catch((e) => deps.log?.(`fleet scene error: ${(e as Error).message}`));
     return reply.code(202).send({ ok: true, speed });
+  });
+
+  /** Bring a merchant's Soundbox down now; Diagnoser and Fixer work it; Manager may auto-dial the merchant. */
+  app.post<{ Body: { merchantId?: string; to?: string; speed?: number } | undefined }>("/api/demo/bring-down", async (req, reply) => {
+    if (!isTrustedControl(req, env)) return reply.code(403).send(deny);
+    const merchantId = req.body?.merchantId ?? "m001";
+    try {
+      deps.store.get(merchantId);
+    } catch {
+      return reply.code(404).send({ error: `unknown merchant ${merchantId}` });
+    }
+    if (bringDownRunning(merchantId)) return reply.code(409).send({ error: "already running for this merchant" });
+    const to = req.body?.to ? normalisePhone(req.body.to) : undefined;
+    if (to && !isE164(to)) return reply.code(400).send({ error: `not an international number: ${to}` });
+    const speed = Number(req.body?.speed ?? env.FLEET_SCENE_SPEED ?? 1);
+    void bringSoundboxDown({
+      store: deps.store,
+      clock: deps.clock,
+      bus: deps.bus,
+      monitor: deps.monitor!,
+      merchantId,
+      dial: deps.dialer!,
+      ...(to ? { to } : {}),
+      speed: Number.isFinite(speed) && speed > 0 ? speed : 1,
+      toolExtras: { ...(deps.whatsapp ? { whatsapp: deps.whatsapp } : {}), ...(deps.customerPhones ? { customerPhones: deps.customerPhones } : {}) },
+      ...(deps.log ? { log: deps.log } : {}),
+    }).catch((e) => deps.log?.(`bring-down error: ${(e as Error).message}`));
+    return reply.code(202).send({ ok: true, merchantId });
   });
 
   /** Back to the opening scene: reseeded store, cleared live panels, clock untouched. */

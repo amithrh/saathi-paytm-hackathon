@@ -160,6 +160,7 @@
   <span class="spacer"></span>
   <a class="btn ghost" href="/fleet">Fleet view</a>
   <button class="ghost" id="ctlFleet" hidden>Start fleet scene</button>
+  <button class="danger" id="ctlDown" hidden>Bring Soundbox down</button>
   <a class="btn ghost" id="ctlCallScreen" target="_blank" rel="noopener">Open laptop call screen</a>
   <button class="danger" id="ctlReset" hidden>Reset scene</button>
 </div>
@@ -335,6 +336,10 @@
 
   let logCount = 0;
   function addLog(en) {
+    if (en.tool === "dial" && $("ctlCallSt")) {
+      if (en.ok) status("ctlCallSt", en.summary, "ok");
+      else { status("ctlCallSt", en.summary, "err"); $("ctlCallSt").innerHTML += ` <a href="/call?merchant=${encodeURIComponent(merchantId)}" target="_blank" style="color:#93c5fd">open call screen</a>`; }
+    }
     if (logCount === 0) $("log").innerHTML = "";
     logCount++;
     const d = document.createElement("div");
@@ -413,7 +418,7 @@
 
   ctlFetch(`/api/demo/config?merchant=${encodeURIComponent(merchantId)}`).then((c) => {
     if (!c.controls) { $("ctlLocked").hidden = false; return; }
-    $("ctlCall").hidden = false; $("ctlReset").hidden = false; $("ctlFleet").hidden = false;
+    $("ctlCall").hidden = false; $("ctlReset").hidden = false; $("ctlFleet").hidden = false; $("ctlDown").hidden = false;
     $("ctlPhone").dataset.value = c.demoPhone; maskedInput($("ctlPhone"));
     if (!c.twilioConfigured) { $("ctlRing").disabled = true; status("ctlCallSt", "Twilio not configured in .env", "err"); }
     if (c.customer) {
@@ -462,6 +467,14 @@
     $("ctlFleet").disabled = true;
     try { await ctlFetch("/api/demo/fleet-scene", {}); location.href = "/fleet"; }
     catch (e) { status("ctlCallSt", e.message, "err"); $("ctlFleet").disabled = false; }
+  });
+
+  $("ctlDown").addEventListener("click", async () => {
+    $("ctlDown").disabled = true;
+    status("ctlCallSt", "Soundbox going silent; Saathi will call if it needs the merchant");
+    try { await ctlFetch("/api/demo/bring-down", { merchantId, to: $("ctlPhone").dataset.value || undefined }); }
+    catch (e) { status("ctlCallSt", e.message, "err"); }
+    finally { setTimeout(() => ($("ctlDown").disabled = false), 5000); }
   });
 
   let resetArmed = null;

@@ -13,6 +13,8 @@ export interface FleetOverlay {
   text?: string;
   role?: Role;
   trigger?: string;
+  /** Shown as a link on the tile when the phone call could not be placed. */
+  fallbackUrl?: string;
 }
 
 export interface FleetTile {
@@ -33,6 +35,7 @@ export interface FleetTile {
   text: string;
   role?: Role;
   trigger?: string;
+  fallbackUrl?: string;
 }
 
 export interface FleetSnapshot {
@@ -116,6 +119,7 @@ export class FleetMonitor {
       status,
       text: o.text ?? (leak ? "Detected, queued for Saathi" : "Watching"),
       ...(o.role ? { role: o.role } : {}),
+      ...(o.fallbackUrl ? { fallbackUrl: o.fallbackUrl } : {}),
       ...(o.trigger ?? leak ? { trigger: (o.trigger ?? leak)! } : {}),
     };
   }

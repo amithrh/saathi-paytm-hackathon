@@ -132,6 +132,43 @@ export class MerchantStore {
     this.changed(merchantId);
   }
 
+  /**
+   * Bring-down demo: the Soundbox goes silent now (or stays silent if it already is).
+   * Returns the offline event that payments will accumulate into.
+   */
+  silenceSoundbox(merchantId: string): Merchant["devices"][number]["events"][number] {
+    const m = this.get(merchantId);
+    const d = m.devices.find((x) => x.type === "soundbox");
+    if (!d) throw new NotFoundError(`soundbox for ${merchantId}`);
+    const last = d.events[d.events.length - 1];
+    if (d.status === "offline" && last?.kind === "offline") {
+      last.unconfirmed ??= { count: 0, amount: 0 };
+      return last;
+    }
+    const at = this.clock.now().toISOString();
+    const ev = { at, kind: "offline" as const, note: "Silent now: heartbeat stopped while payments keep landing in the app unannounced", unconfirmed: { count: 0, amount: 0 } };
+    d.status = "offline";
+    d.lastHeartbeat = at;
+    d.events.push(ev);
+    this.changed(merchantId);
+    return ev;
+  }
+
+  /** A UPI payment lands in the app while the Soundbox is silent: counted as unannounced. */
+  addUnannouncedPayment(merchantId: string, amount: number): { count: number; amount: number } {
+    const m = this.get(merchantId);
+    const d = m.devices.find((x) => x.type === "soundbox");
+    const ev = d ? [...d.events].reverse().find((e) => e.kind === "offline") : undefined;
+    if (!d || d.status !== "offline" || !ev) throw new Error(`${merchantId} Soundbox is not silent`);
+    ev.unconfirmed ??= { count: 0, amount: 0 };
+    ev.unconfirmed.count += 1;
+    ev.unconfirmed.amount += amount;
+    this.seq++;
+    m.transactions.push({ id: `T-LIVE-${merchantId}-${this.seq}`, at: this.clock.now().toISOString(), amount, channel: "upi_qr", status: "success" });
+    this.changed(merchantId);
+    return { ...ev.unconfirmed };
+  }
+
   /** Fleet scene: the oldest open udhaar line crosses the ageing threshold. Returns that line. */
   ageUdhaar(merchantId: string, days: number): Merchant["udhaar"][number] {
     const m = this.get(merchantId);

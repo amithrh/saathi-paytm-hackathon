@@ -13,6 +13,7 @@ import type { ServerEvent } from "../shared/types.js";
 import { registerTwilioRoutes } from "../twilio/src/routes.js";
 import { isTrustedControl, registerDemoRoutes } from "./demo.js";
 import { FleetMonitor } from "../backend/src/fleet.js";
+import type { Dialer } from "../backend/src/bringdown.js";
 import { attachBrowserTransport } from "../voice/src/browser-transport.js";
 import { CallSession, type CallEvent } from "../voice/src/pipeline.js";
 import type { SpeechClient } from "../voice/src/speech.js";
@@ -28,6 +29,8 @@ export interface AppDeps {
   /** Per-call brain; defaults to `llm`. The offline mode uses this to pick the merchant's scripted scene. */
   llmFor?: (merchantId: string) => ChatClient;
   speech: SpeechClient;
+  /** Rings the merchant; buildApp wires it to the Twilio path. Tests pass a fake. */
+  dialer?: Dialer;
   /** Fleet tiles and scene state; created by buildApp if absent. */
   monitor?: FleetMonitor;
   /** ms after a reminder before the mock customer pays; 0 disables. */
@@ -100,8 +103,12 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   await app.register(fastifyStatic, { root: path.join(ROOT, "voice", "public"), prefix: "/call/", decorateReply: false });
 
   await registerBackendRoutes(app, { store: deps.store, clock: deps.clock, bus: deps.bus, ...(deps.whatsapp ? { whatsapp: deps.whatsapp } : {}), ...(deps.customerPhones ? { customerPhones: deps.customerPhones } : {}) });
+  const twilio = await registerTwilioRoutes(app, { authorize: (req) => isTrustedControl(req, process.env), makeSession: makeSessionFactory(deps, "phone"), ...(deps.publicBaseUrl ? { publicBaseUrl: deps.publicBaseUrl } : {}), ...(deps.log ? { log: deps.log } : {}) });
+  deps.dialer ??= async (merchantId, to) => {
+    const r = await twilio.dial(merchantId, to);
+    return r.ok ? { ok: true, callSid: r.callSid, status: r.status } : { ok: false, error: r.error };
+  };
   await registerDemoRoutes(app, deps);
-  await registerTwilioRoutes(app, { authorize: (req) => isTrustedControl(req, process.env), makeSession: makeSessionFactory(deps, "phone"), ...(deps.publicBaseUrl ? { publicBaseUrl: deps.publicBaseUrl } : {}), ...(deps.log ? { log: deps.log } : {}) });
 
   const callHtml = () => readFileSync(path.join(ROOT, "voice", "public", "call.html"), "utf8");
   const dashHtml = () => readFileSync(path.join(ROOT, "dashboard", "public", "index.html"), "utf8");
